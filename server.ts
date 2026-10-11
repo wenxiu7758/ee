@@ -1541,9 +1541,19 @@ async function start() {
   const PORT = port || defaultPort;
 
   const isProduction = process.env.NODE_ENV === 'production';
-  // Prefer dist/ if built, otherwise fallback to web/ (pre-bundled static assets in repo)
+  // 智能选择最新构建的前端目录（优先比较 dist 与 web 的时间戳，确保加载最新产物）
   let staticPath = path.resolve('dist');
-  if (!fs.existsSync(path.join(staticPath, 'index.html')) && fs.existsSync(path.resolve('web', 'index.html'))) {
+  const distIndex = path.join(path.resolve('dist'), 'index.html');
+  const webIndex = path.join(path.resolve('web'), 'index.html');
+  if (fs.existsSync(distIndex) && fs.existsSync(webIndex)) {
+    try {
+      const distMtime = fs.statSync(distIndex).mtimeMs;
+      const webMtime = fs.statSync(webIndex).mtimeMs;
+      staticPath = distMtime >= webMtime ? path.resolve('dist') : path.resolve('web');
+    } catch (_) {
+      staticPath = path.resolve('dist');
+    }
+  } else if (!fs.existsSync(distIndex) && fs.existsSync(webIndex)) {
     staticPath = path.resolve('web');
   }
   const httpServer = http.createServer(app);
@@ -1563,17 +1573,38 @@ async function start() {
       try {
         let template = fs.readFileSync(path.resolve('index.html'), 'utf-8');
         template = await vite.transformIndexHtml(url, template);
-        res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
+        res.status(200).set({
+          'Content-Type': 'text/html',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        }).end(template);
       } catch (e) {
         if (vite.ssrFixStacktrace) vite.ssrFixStacktrace(e as Error);
         next(e);
       }
     });
   } else {
+    // 强制禁用 HTML、Service Worker 与 Manifest 缓存，防止浏览器/PWA 加载旧版本
+    app.use((req, res, next) => {
+      const p = req.path;
+      if (p === '/' || p === '/index.html' || p === '/sw.js' || p.endsWith('.webmanifest') || p.endsWith('manifest.json')) {
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+        res.set('Pragma', 'no-cache');
+        res.set('Expires', '0');
+      } else if (p.startsWith('/assets/')) {
+        res.set('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+      next();
+    });
+
     app.use(express.static(staticPath));
     app.get('*', (req, res) => {
       const indexPath = path.join(staticPath, 'index.html');
       if (fs.existsSync(indexPath)) {
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+        res.set('Pragma', 'no-cache');
+        res.set('Expires', '0');
         res.sendFile(indexPath);
       } else {
         res.status(200).send(`<!DOCTYPE html>

@@ -47,14 +47,14 @@ if [ -z "$GO_BIN" ] && [ -x "./server" ]; then
     GO_BIN="./server"
 fi
 
-# 如果有预编译 Go 二进制或 Go 编译器，并且用户没有强制要求 Node.js
-if ([ -n "$GO_BIN" ] || command -v go &> /dev/null) && [ "$USE_NODE" != "1" ]; then
-    echo -e "\033[32;1m🚀 检测到 Go 运行模式：免安装 Node.js/npm，前端已内嵌于 Go 服务！\033[0m"
+# 优先使用 Node.js 模式运行最新 React 前端产物（若设置 USE_GO=1 则切换为 Go 二进制模式）
+if [ "$USE_GO" = "1" ] && ([ -n "$GO_BIN" ] || command -v go &> /dev/null); then
+    echo -e "\033[32;1m🚀 检测到指定 Go 运行模式 (USE_GO=1)：免安装 Node.js/npm！\033[0m"
     if [ -n "$GO_BIN" ]; then
         echo -e "\033[32;1m✅ 预编译 Go 服务端已就绪: ${GO_BIN} (秒级启动)\033[0m"
     fi
 else
-    # 仅在需要 Node.js 模式时才检查 node 与 npm
+    # 默认 Node.js 模式：确保运行最新的 React 网页交互与 UI 界面
     echo -e "\033[33;1m[1/3] 检查系统基础运行环境 (Node.js)...\033[0m"
     if ! command -v node &> /dev/null; then
         echo "⚡ 未检测到 Node.js，正在尝试安装..."
@@ -71,10 +71,10 @@ else
         npm install --legacy-peer-deps
     fi
 
-    echo -e "\033[33;1m[3/3] 检查前端静态资源 (dist)...\033[0m"
+    echo -e "\033[33;1m[3/3] 检查前端静态资源 (dist/web)...\033[0m"
     if [ ! -f "dist/index.html" ]; then
         if [ -f "web/index.html" ]; then
-            echo "⚡ 正在从预构建 web 目录同步到 dist/..."
+            echo "⚡ 正在从最新预构建 web 目录同步到 dist/..."
             mkdir -p dist
             cp -r web/* dist/ 2>/dev/null || true
         else
@@ -117,13 +117,16 @@ echo -e "\033[33;1m💡 提示: 您可以自行全局安装 PM2 并通过 pm2 st
 echo -e "\033[32;1m==============================================================\033[0m"
 echo ""
 
-# 启动服务 (优先使用预编译的 Go 服务端，也支持 USE_NODE=1 使用 Node.js 启动)
-if [ -n "$GO_BIN" ] && [ -x "$GO_BIN" ] && [ "$USE_NODE" != "1" ]; then
+# 启动服务 (默认使用 Node.js 加载最新 React 前端，确保用户看到最新界面；USE_GO=1 时使用 Go)
+if [ "$USE_GO" = "1" ] && [ -n "$GO_BIN" ] && [ -x "$GO_BIN" ]; then
     echo -e "\033[32;1m⚡ 正在以 Go 服务端运行 (${GO_BIN})...\033[0m"
     PORT=$PORT $GO_BIN
-elif command -v go &> /dev/null && [ "$USE_NODE" != "1" ]; then
+elif [ "$USE_GO" = "1" ] && command -v go &> /dev/null; then
     echo "⚡ 正在以 Go 服务模式运行 (go run main.go)..."
     PORT=$PORT go run main.go
+elif [ -f "server.js" ] && [ -s "server.js" ]; then
+    echo -e "\033[32;1m⚡ 正在以 Node.js 运行最新 React 前端服务 (node server.js)...\033[0m"
+    PORT=$PORT NODE_ENV=production node server.js
 else
     PORT=$PORT npm start
 fi

@@ -6,6 +6,14 @@ import { registerSW } from 'virtual:pwa-register';
 // Automatically register, update and activate PWA service worker safely in top window
 if (typeof window !== 'undefined' && window.self === window.top && 'serviceWorker' in navigator) {
   try {
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) {
+        refreshing = true;
+        window.location.reload();
+      }
+    });
+
     const updateSW = registerSW({
       immediate: true,
       onNeedRefresh() {

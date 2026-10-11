@@ -38,6 +38,11 @@ var DATA_TEMP = path.join(DATA_DIR, "db.json.tmp");
 var ENV_BOT_TOKEN = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || process.env.TG_BOT_TOKEN || "";
 var ENV_BOT_ID = process.env.BOT_ID || process.env.TELEGRAM_BOT_ID || process.env.TG_BOT_ID || (ENV_BOT_TOKEN.split(":")[0] || "");
 var ENV_TG_API_HOST = process.env.TG_API_HOST || process.env.TELEGRAM_API_HOST || "https://api.telegram.org";
+var ENV_SYNC_REMOTE_URL = process.env.SYNC_REMOTE_URL || process.env.REMOTE_URL || "";
+var ENV_SYNC_SECRET = process.env.SYNC_SECRET_KEY || process.env.SYNC_SECRET || "chudadi_sync_secret_8888";
+var ENV_NODE_ROLE = process.env.NODE_ROLE || (process.env.SERV00 ? "serv00_cloud" : process.env.TERMUX_VERSION ? "termux_local" : "standalone");
+var ENV_NODE_NAME = process.env.NODE_NAME || (ENV_NODE_ROLE === "serv00_cloud" ? "Serv00-Cloud-Master" : ENV_NODE_ROLE === "termux_local" ? "Termux-Mobile-Node" : "ChuDaDi-Primary-Node");
+var ENV_ENABLE_TG_BOT = process.env.ENABLE_TG_BOT !== void 0 ? process.env.ENABLE_TG_BOT === "true" : ENV_NODE_ROLE === "termux_local" ? false : true;
 var DEFAULT_ADMIN_PHONE = "13800138000";
 var defaultDb = {
   authorizedPhones: [
@@ -60,7 +65,8 @@ var defaultDb = {
       wins: 66,
       losses: 12,
       isBotAdmin: true,
-      createdAt: (/* @__PURE__ */ new Date()).toISOString()
+      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
     },
     "18888888888": {
       phone: "18888888888",
@@ -73,7 +79,8 @@ var defaultDb = {
       wins: 30,
       losses: 10,
       isBotAdmin: false,
-      createdAt: (/* @__PURE__ */ new Date()).toISOString()
+      createdAt: (/* @__PURE__ */ new Date()).toISOString(),
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
     }
   },
   botConfig: {
@@ -83,12 +90,24 @@ var defaultDb = {
     adminId: "123456789",
     webhookUrl: "https://example.com/api/bot/webhook"
   },
+  syncConfig: {
+    nodeRole: ENV_NODE_ROLE,
+    nodeName: ENV_NODE_NAME,
+    enableBotPolling: ENV_ENABLE_TG_BOT,
+    remoteUrl: ENV_SYNC_REMOTE_URL,
+    syncSecret: ENV_SYNC_SECRET,
+    autoSync: true,
+    autoSyncIntervalMinutes: 5,
+    lastSyncTime: "",
+    lastSyncStatus: "idle",
+    lastSyncMessage: "\u7B49\u5F85\u540C\u6B65"
+  },
   logs: [
     {
       id: "1",
       time: (/* @__PURE__ */ new Date()).toISOString(),
-      type: "BOT_EVENT",
-      message: loadedEnvPath ? `\u4F7F\u7528\u914D\u7F6E\u6587\u4EF6 ${loadedEnvPath} \u542F\u52A8 Telegram Bot \u670D\u52A1` : "Telegram Bot \u7BA1\u7406\u4E2D\u5FC3\u670D\u52A1\u542F\u52A8\uFF0C\u7B49\u5F85 .env \u6216\u63A7\u5236\u53F0\u914D\u7F6E"
+      type: "SYSTEM",
+      message: loadedEnvPath ? `\u8F7D\u5165\u914D\u7F6E\u6587\u4EF6 ${loadedEnvPath}\uFF0C\u8282\u70B9\u89D2\u8272: ${ENV_NODE_ROLE}\uFF0C\u5355Bot\u6A21\u5F0F: ${ENV_ENABLE_TG_BOT ? "\u672C\u7AEF\u5E38\u9A7B\u62C9\u53D6" : "\u7531\u4E91\u7AEF\u62C9\u53D6"}` : `\u670D\u52A1\u542F\u52A8\uFF0C\u8282\u70B9\u89D2\u8272: ${ENV_NODE_ROLE}\uFF0C\u5355Bot\u6A21\u5F0F: ${ENV_ENABLE_TG_BOT ? "\u672C\u7AEF\u5E38\u9A7B\u62C9\u53D6" : "\u7531\u4E91\u7AEF\u62C9\u53D6"}`
     }
   ]
 };
@@ -101,8 +120,19 @@ function loadDatabase() {
       const data = fs.readFileSync(DATA_FILE, "utf-8");
       const parsed = JSON.parse(data);
       const merged = { ...defaultDb, ...parsed };
+      if (!merged.syncConfig) {
+        merged.syncConfig = { ...defaultDb.syncConfig };
+      } else {
+        merged.syncConfig = { ...defaultDb.syncConfig, ...merged.syncConfig };
+      }
       if (ENV_BOT_TOKEN) merged.botConfig.token = ENV_BOT_TOKEN;
       if (ENV_BOT_ID) merged.botConfig.botId = ENV_BOT_ID;
+      if (ENV_SYNC_REMOTE_URL && !merged.syncConfig.remoteUrl) merged.syncConfig.remoteUrl = ENV_SYNC_REMOTE_URL;
+      if (process.env.SYNC_SECRET_KEY) merged.syncConfig.syncSecret = process.env.SYNC_SECRET_KEY;
+      if (process.env.NODE_ROLE) merged.syncConfig.nodeRole = ENV_NODE_ROLE;
+      if (process.env.ENABLE_TG_BOT !== void 0) {
+        merged.syncConfig.enableBotPolling = process.env.ENABLE_TG_BOT === "true";
+      }
       return merged;
     }
   } catch (err) {
@@ -259,6 +289,7 @@ function processTelegramCommand(commandText, chatId = "123456789") {
         } else {
           const delta = Number(arg2);
           u.coins += delta;
+          u.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
           saveDatabase(db);
           addLog("TG_BOT", `TG \u5145\u503C\u73A9\u5BB6 ${u.nickname} \u79EF\u5206: ${delta}`);
           replyText = `\u{1F4B0} \u5145\u503C\u6210\u529F\uFF01\u73A9\u5BB6 *${u.nickname}* (\`${arg1}\`) \u5F53\u524D\u79EF\u5206\uFF1A\`${u.coins.toLocaleString()}\``;
@@ -274,6 +305,7 @@ function processTelegramCommand(commandText, chatId = "123456789") {
           replyText = `\u274C \u672A\u627E\u5230\u624B\u673A\u53F7\u4E3A \`${arg1}\` \u7684\u73A9\u5BB6`;
         } else {
           u.password = arg2;
+          u.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
           saveDatabase(db);
           addLog("TG_BOT", `TG \u91CD\u7F6E\u73A9\u5BB6 ${u.nickname} \u5BC6\u7801\u4E3A: ${arg2}`);
           replyText = `\u{1F511} \u5BC6\u7801\u91CD\u7F6E\u6210\u529F\uFF01\u73A9\u5BB6 *${u.nickname}* \u7684\u65B0\u5BC6\u7801\u8BBE\u4E3A\uFF1A\`${arg2}\``;
@@ -282,10 +314,13 @@ function processTelegramCommand(commandText, chatId = "123456789") {
       break;
     case "/info":
       replyText = `\u2139\uFE0F *Telegram Bot \u8FD0\u884C\u72B6\u6001*
+\u2022 \u8282\u70B9\u89D2\u8272: \`${db.syncConfig.nodeRole}\` (${db.syncConfig.nodeName}) 
 \u2022 \u914D\u7F6E\u6587\u4EF6: \`${loadedEnvPath || "\u5185\u7F6E/\u73AF\u5883\u53D8\u91CF"}\` 
 \u2022 Bot ID: \`${db.botConfig.botId || "7890123456"}\` 
+\u2022 \u5355Bot\u5E38\u9A7B\u8F6E\u8BE2: \`${db.syncConfig.enableBotPolling ? "\u5DF2\u542F\u7528 (\u4E91\u7AEF\u5E38\u9A7B)" : "\u5DF2\u4F11\u7720 (\u7531\u4E91\u7AEF\u5E38\u9A7B)"}\` 
 \u2022 \u6388\u6743\u624B\u673A\u53F7\u6570: \`${db.authorizedPhones.length}\` 
-\u2022 \u6E38\u620F\u6CE8\u518C\u73A9\u5BB6: \`${Object.keys(db.users).length}\``;
+\u2022 \u6E38\u620F\u6CE8\u518C\u73A9\u5BB6: \`${Object.keys(db.users).length}\` 
+\u2022 \u6570\u636E\u5BF9\u7AEF\u8282\u70B9: \`${db.syncConfig.remoteUrl || "\u672A\u914D\u7F6E"}\``;
       break;
     default:
       replyText = `\u{1F916} \u672A\u77E5\u547D\u4EE4: \`${cleanText}\`\u3002\u53D1\u9001 \`/help\` \u67E5\u770B\u952E\u76D8\u83DC\u5355\u4E0E\u6307\u4EE4\u8BF4\u660E\u3002`;
@@ -300,13 +335,21 @@ async function startTelegramPolling() {
     console.log("\u2139\uFE0F Telegram Bot Token \u672A\u914D\u7F6E\uFF0C\u53EF\u901A\u8FC7 .env \u8BBE\u7F6E BOT_TOKEN \u5F00\u542F\u8F6E\u8BE2");
     return;
   }
+  if (db.syncConfig && db.syncConfig.enableBotPolling === false) {
+    console.log(`\u2139\uFE0F [\u5355Bot\u6A21\u5F0F] \u5F53\u524D\u8282\u70B9 (${db.syncConfig.nodeName}) \u672A\u542F\u7528 TG \u8F6E\u8BE2 (\u5DF2\u7531\u4E91\u7AEF\u5E38\u9A7B\u8282\u70B9\u62C9\u53D6\uFF0C\u9632\u6B62 409 \u51B2\u7A81)`);
+    return;
+  }
   if (isPollingRunning) {
     return;
   }
   isPollingRunning = true;
-  console.log(`\u{1F916} \u5F00\u59CB\u542F\u52A8 Telegram Bot \u5B9E\u65F6 Polling \u76D1\u542C (Bot ID: ${db.botConfig.botId})...`);
-  addLog("TG_POLLING", "Telegram Bot \u952E\u76D8\u83DC\u5355\u4E0E\u8F6E\u8BE2\u670D\u52A1\u5DF2\u5728\u7EBF\u8FD0\u884C");
+  console.log(`\u{1F916} \u5F00\u59CB\u542F\u52A8 Telegram Bot \u5B9E\u65F6 Polling \u76D1\u542C (Bot ID: ${db.botConfig.botId}, Node: ${db.syncConfig.nodeName})...`);
+  addLog("TG_POLLING", `Telegram Bot \u8F6E\u8BE2\u5DF2\u6FC0\u6D3B [\u8282\u70B9: ${db.syncConfig?.nodeName || "\u672C\u8282\u70B9"}]`);
   async function pollUpdates() {
+    if (!isPollingRunning || db.syncConfig && db.syncConfig.enableBotPolling === false) {
+      isPollingRunning = false;
+      return;
+    }
     try {
       const currentToken = db.botConfig.token;
       if (!currentToken || currentToken.includes("ExampleToken")) {
@@ -319,6 +362,7 @@ async function startTelegramPolling() {
       if (res.ok) {
         const data = await res.json();
         if (data.ok && Array.isArray(data.result)) {
+          let hasChanges = false;
           for (const update of data.result) {
             lastUpdateId = Math.max(lastUpdateId, update.update_id);
             if (update.message && update.message.text) {
@@ -327,19 +371,182 @@ async function startTelegramPolling() {
               console.log(`\u{1F4E9} \u6536\u5230 Telegram \u6765\u81EA ${chatId} \u7684\u6D88\u606F: ${text}`);
               const reply = processTelegramCommand(text, chatId);
               await sendTelegramMessage(chatId, reply, currentToken, true);
+              const firstWord = text.trim().split(/\s+/)[0].toLowerCase();
+              if (["/auth", "/authorize", "/unauth", "/revoke", "/addcoins", "/resetpwd"].includes(firstWord)) {
+                hasChanges = true;
+              }
             }
           }
+          if (hasChanges) {
+            triggerDebouncedSync();
+          }
         }
+      } else if (res.status === 409) {
+        console.warn("\u26A0\uFE0F Telegram Bot \u51B2\u7A81 (409 Conflict): \u53E6\u4E00\u4E2A\u5B9E\u4F8B\u6B63\u5728\u62C9\u53D6\u8BE5 Bot Token\u3002\u5DF2\u6682\u505C\u5F53\u524D\u8F6E\u8BE2\u4EE5\u907F\u514D\u7ADE\u4E89\u3002");
+        addLog("TG_CONFLICT", "\u68C0\u6D4B\u5230\u5176\u4ED6\u8282\u70B9\u5DF2\u5728\u8FD0\u884C\u6B64 Bot (409 Conflict)\uFF0C\u5F53\u524D\u8282\u70B9\u81EA\u52A8\u4F11\u7720");
+        isPollingRunning = false;
+        return;
       }
     } catch (err) {
     } finally {
-      if (isPollingRunning) {
+      if (isPollingRunning && db.syncConfig?.enableBotPolling !== false) {
         setTimeout(pollUpdates, 2e3);
+      } else {
+        isPollingRunning = false;
       }
     }
   }
   pollUpdates();
 }
+function stopTelegramPolling() {
+  if (isPollingRunning) {
+    isPollingRunning = false;
+    addLog("TG_POLLING", "\u5DF2\u505C\u7528\u672C\u8282\u70B9\u7684 Telegram Bot \u8F6E\u8BE2");
+    console.log("\u{1F6D1} Telegram Bot \u8F6E\u8BE2\u5DF2\u505C\u7528");
+  }
+}
+function mergeDatabases(local, incoming) {
+  const phoneSet = /* @__PURE__ */ new Set([
+    ...local.authorizedPhones || [],
+    ...incoming.authorizedPhones || []
+  ]);
+  const mergedPhones = Array.from(phoneSet);
+  const addedPhones = mergedPhones.length - (local.authorizedPhones?.length || 0);
+  const mergedUsers = { ...local.users || {} };
+  const allUserPhones = /* @__PURE__ */ new Set([
+    ...Object.keys(local.users || {}),
+    ...Object.keys(incoming.users || {})
+  ]);
+  let mergedUsersCount = 0;
+  for (const phone of allUserPhones) {
+    const uLocal = local.users ? local.users[phone] : void 0;
+    const uInc = incoming.users ? incoming.users[phone] : void 0;
+    if (uLocal && !uInc) {
+      mergedUsers[phone] = uLocal;
+    } else if (!uLocal && uInc) {
+      mergedUsers[phone] = uInc;
+      mergedUsersCount++;
+    } else if (uLocal && uInc) {
+      const localTime = new Date(uLocal.updatedAt || uLocal.createdAt || 0).getTime();
+      const incTime = new Date(uInc.updatedAt || uInc.createdAt || 0).getTime();
+      const newer = incTime > localTime ? uInc : uLocal;
+      const older = incTime > localTime ? uLocal : uInc;
+      mergedUsers[phone] = {
+        ...older,
+        ...newer,
+        // Safeguard user assets: pick maximal values to prevent accidental loss
+        coins: Math.max(uLocal.coins || 0, uInc.coins || 0),
+        diamonds: Math.max(uLocal.diamonds || 0, uInc.diamonds || 0),
+        wins: Math.max(uLocal.wins || 0, uInc.wins || 0),
+        losses: Math.max(uLocal.losses || 0, uInc.losses || 0),
+        isBotAdmin: Boolean(uLocal.isBotAdmin || uInc.isBotAdmin),
+        updatedAt: new Date(Math.max(localTime, incTime, Date.now())).toISOString()
+      };
+      mergedUsersCount++;
+    }
+  }
+  return {
+    authorizedPhones: mergedPhones,
+    users: mergedUsers,
+    addedPhones,
+    mergedUsersCount
+  };
+}
+async function executeSync(action = "two-way") {
+  const remoteUrl = (db.syncConfig.remoteUrl || "").trim().replace(/\/+$/, "");
+  const syncSecret = (db.syncConfig.syncSecret || "").trim();
+  if (!remoteUrl) {
+    return { success: false, message: "\u672A\u914D\u7F6E\u5BF9\u7AEF\u670D\u52A1\u5668\u5730\u5740 (Remote URL)" };
+  }
+  db.syncConfig.lastSyncStatus = "syncing";
+  db.syncConfig.lastSyncMessage = `\u6B63\u5728\u4E0E ${remoteUrl} \u5EFA\u7ACB\u540C\u6B65\u8FDE\u63A5...`;
+  try {
+    const payload = {
+      action,
+      senderNode: db.syncConfig.nodeName || "ChuDaDi-Node",
+      senderRole: db.syncConfig.nodeRole,
+      data: {
+        authorizedPhones: db.authorizedPhones,
+        users: db.users
+      }
+    };
+    const targetUrl = `${remoteUrl}/api/sync/receive`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12e3);
+    const res = await fetch(targetUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Sync-Secret": syncSecret
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      const errMsg = errData.error || `HTTP \u9519\u8BEF ${res.status}`;
+      db.syncConfig.lastSyncStatus = "error";
+      db.syncConfig.lastSyncMessage = `\u540C\u6B65\u5931\u8D25: ${errMsg}`;
+      return { success: false, message: `\u5BF9\u7AEF\u54CD\u5E94\u9519\u8BEF: ${errMsg}` };
+    }
+    const resData = await res.json();
+    if (!resData.success) {
+      db.syncConfig.lastSyncStatus = "error";
+      db.syncConfig.lastSyncMessage = resData.error || "\u540C\u6B65\u5931\u8D25";
+      return { success: false, message: resData.error || "\u540C\u6B65\u5931\u8D25" };
+    }
+    if (action === "two-way" && resData.mergedData) {
+      db.authorizedPhones = resData.mergedData.authorizedPhones;
+      db.users = resData.mergedData.users;
+    } else if (action === "pull" && resData.remoteData) {
+      db.authorizedPhones = resData.remoteData.authorizedPhones;
+      db.users = resData.remoteData.users;
+    }
+    const nowStr = (/* @__PURE__ */ new Date()).toLocaleTimeString();
+    db.syncConfig.lastSyncTime = nowStr;
+    db.syncConfig.lastSyncStatus = "success";
+    const summaryMsg = `\u540C\u6B65\u5B8C\u6210 (${action}): \u6388\u6743\u624B\u673A ${db.authorizedPhones.length} \u4E2A, \u73A9\u5BB6\u8D26\u53F7 ${Object.keys(db.users).length} \u4F4D [\u5BF9\u7AEF: ${resData.nodeName || remoteUrl}]`;
+    db.syncConfig.lastSyncMessage = summaryMsg;
+    addLog("DATA_SYNC", summaryMsg);
+    saveDatabase(db);
+    return {
+      success: true,
+      message: summaryMsg,
+      stats: {
+        authorizedPhonesCount: db.authorizedPhones.length,
+        usersCount: Object.keys(db.users).length,
+        remoteNodeName: resData.nodeName
+      }
+    };
+  } catch (err) {
+    const errMsg = err.name === "AbortError" ? "\u8FDE\u63A5\u8D85\u65F6 (12\u79D2)" : err.message || "\u7F51\u7EDC\u8FDE\u63A5\u5931\u8D25";
+    db.syncConfig.lastSyncStatus = "error";
+    db.syncConfig.lastSyncMessage = `\u540C\u6B65\u5931\u8D25: ${errMsg}`;
+    saveDatabase(db);
+    return { success: false, message: `\u8FDE\u63A5\u5F02\u5E38: ${errMsg}` };
+  }
+}
+var debouncedSyncTimer = null;
+function triggerDebouncedSync() {
+  if (!db.syncConfig || !db.syncConfig.autoSync || !db.syncConfig.remoteUrl) return;
+  if (debouncedSyncTimer) clearTimeout(debouncedSyncTimer);
+  debouncedSyncTimer = setTimeout(() => {
+    executeSync("two-way").catch(() => {
+    });
+  }, 2500);
+}
+setInterval(() => {
+  try {
+    if (db.syncConfig && db.syncConfig.autoSync && db.syncConfig.remoteUrl) {
+      executeSync("two-way").catch((err) => {
+        console.error("Periodic auto-sync background error:", err.message);
+      });
+    }
+  } catch (err) {
+    console.error("Error in periodic auto-sync interval:", err);
+  }
+}, 5 * 60 * 1e3);
 app.get("/api/bot/env-status", (req, res) => {
   return res.json({
     loadedEnvPath,
@@ -408,6 +615,7 @@ app.post("/api/auth/register", (req, res) => {
   if (db.users[cleanPhone]) {
     return res.status(400).json({ error: "\u8BE5\u624B\u673A\u53F7\u5DF2\u6CE8\u518C\uFF0C\u8BF7\u76F4\u63A5\u767B\u5F55" });
   }
+  const nowIso = (/* @__PURE__ */ new Date()).toISOString();
   const newUser = {
     phone: cleanPhone,
     nickname: cleanNickname,
@@ -418,11 +626,13 @@ app.post("/api/auth/register", (req, res) => {
     wins: 0,
     losses: 0,
     isBotAdmin: cleanPhone === DEFAULT_ADMIN_PHONE,
-    createdAt: (/* @__PURE__ */ new Date()).toISOString()
+    createdAt: nowIso,
+    updatedAt: nowIso
   };
   db.users[cleanPhone] = newUser;
   addLog("REGISTER", `\u65B0\u7528\u6237\u6CE8\u518C: ${cleanNickname} (${cleanPhone})`);
   saveDatabase(db);
+  triggerDebouncedSync();
   return res.json({
     success: true,
     user: newUser,
@@ -463,7 +673,9 @@ app.post("/api/auth/update-profile", (req, res) => {
   if (typeof losses === "number") user.losses = losses;
   if (nickname) user.nickname = nickname;
   if (avatar) user.avatar = avatar;
+  user.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
   saveDatabase(db);
+  triggerDebouncedSync();
   return res.json({ success: true, user });
 });
 app.post("/api/bot/authorize-phone", (req, res) => {
@@ -475,6 +687,7 @@ app.post("/api/bot/authorize-phone", (req, res) => {
     db.authorizedPhones.push(phone);
     addLog("TG_BOT_AUTH", `\u7BA1\u7406\u5458/Bot \u6388\u6743\u65B0\u624B\u673A\u53F7: ${phone}`);
     saveDatabase(db);
+    triggerDebouncedSync();
   }
   return res.json({
     success: true,
@@ -491,6 +704,7 @@ app.post("/api/bot/revoke-phone", (req, res) => {
   db.authorizedPhones = db.authorizedPhones.filter((p) => p !== phone);
   addLog("TG_BOT_REVOKE", `\u53D6\u6D88\u6388\u6743\u624B\u673A\u53F7: ${phone}`);
   saveDatabase(db);
+  triggerDebouncedSync();
   return res.json({
     success: true,
     phone,
@@ -504,6 +718,8 @@ app.get("/api/admin/users", (req, res) => {
     authorizedPhones: db.authorizedPhones,
     logs: db.logs,
     botConfig: db.botConfig,
+    syncConfig: db.syncConfig,
+    isBotPollingActive: isPollingRunning,
     loadedEnvPath
   });
 });
@@ -517,10 +733,12 @@ app.post("/api/admin/modify-user", (req, res) => {
     delete db.users[phone];
     addLog("ADMIN_DELETE", `\u7BA1\u7406\u5458\u5220\u9664\u7528\u6237: ${phone}`);
     saveDatabase(db);
+    triggerDebouncedSync();
     return res.json({ success: true, message: `\u5DF2\u5220\u9664\u7528\u6237 ${phone}` });
   }
   if (typeof coins === "number" && user) {
     user.coins = coins;
+    user.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
     addLog("ADMIN_COINS", `\u4FEE\u6539\u7528\u6237 ${user.nickname} \u79EF\u5206: ${coins}`);
   }
   if (password && user) {
@@ -528,13 +746,16 @@ app.post("/api/admin/modify-user", (req, res) => {
       return res.status(400).json({ error: "\u65B0\u5BC6\u7801\u5FC5\u987B\u4E3A 6 \u4F4D\u6570" });
     }
     user.password = password;
+    user.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
     addLog("ADMIN_PASSWORD", `\u91CD\u7F6E\u7528\u6237 ${user.nickname} \u5BC6\u7801\u4E3A: ${password}`);
   }
   if (typeof isBotAdmin === "boolean" && user) {
     user.isBotAdmin = isBotAdmin;
+    user.updatedAt = (/* @__PURE__ */ new Date()).toISOString();
     addLog("ADMIN_ROLE", `\u4FEE\u6539\u7528\u6237 ${user.nickname} Bot \u7BA1\u7406\u5458\u6743\u9650: ${isBotAdmin}`);
   }
   saveDatabase(db);
+  triggerDebouncedSync();
   return res.json({ success: true, user, users: Object.values(db.users) });
 });
 app.post("/api/bot/config", (req, res) => {
@@ -546,7 +767,9 @@ app.post("/api/bot/config", (req, res) => {
   if (webhookUrl !== void 0) db.botConfig.webhookUrl = webhookUrl;
   addLog("BOT_CONFIG", "\u66F4\u65B0 Telegram Bot \u914D\u7F6E\u4FE1\u606F");
   saveDatabase(db);
-  startTelegramPolling();
+  if (db.syncConfig.enableBotPolling) {
+    startTelegramPolling();
+  }
   return res.json({ success: true, botConfig: db.botConfig });
 });
 app.get("/api/bot/webhook", (req, res) => {
@@ -575,6 +798,10 @@ app.post("/api/bot/webhook", async (req, res) => {
   console.log(`\u{1F4E9} \u6536\u5230 Telegram Webhook \u6307\u4EE4 [Chat: ${chatId}]: ${commandText}`);
   addLog("TG_WEBHOOK", `\u63A5\u6536\u5230 Telegram Webhook \u6307\u4EE4: ${commandText}`);
   const replyText = processTelegramCommand(commandText, chatId || "123456789");
+  const firstWord = commandText.split(/\s+/)[0].toLowerCase();
+  if (["/auth", "/authorize", "/unauth", "/revoke", "/addcoins", "/resetpwd"].includes(firstWord)) {
+    triggerDebouncedSync();
+  }
   if (chatId) {
     sendTelegramMessage(chatId, replyText, db.botConfig.token, true).catch(() => {
     });
@@ -593,6 +820,195 @@ app.post("/api/bot/webhook", async (req, res) => {
     replyText,
     authorizedPhones: db.authorizedPhones,
     usersCount: Object.keys(db.users).length
+  });
+});
+app.get("/api/sync/status", (req, res) => {
+  return res.json({
+    syncConfig: db.syncConfig,
+    isBotPollingActive: isPollingRunning,
+    authorizedPhonesCount: db.authorizedPhones.length,
+    usersCount: Object.keys(db.users).length
+  });
+});
+app.post("/api/sync/config", (req, res) => {
+  const {
+    nodeRole,
+    nodeName,
+    enableBotPolling,
+    remoteUrl,
+    syncSecret,
+    autoSync,
+    autoSyncIntervalMinutes
+  } = req.body || {};
+  if (nodeRole !== void 0) db.syncConfig.nodeRole = nodeRole;
+  if (nodeName !== void 0) db.syncConfig.nodeName = String(nodeName).trim();
+  if (remoteUrl !== void 0) db.syncConfig.remoteUrl = String(remoteUrl).trim();
+  if (syncSecret !== void 0) db.syncConfig.syncSecret = String(syncSecret).trim();
+  if (autoSync !== void 0) db.syncConfig.autoSync = !!autoSync;
+  if (autoSyncIntervalMinutes !== void 0) {
+    db.syncConfig.autoSyncIntervalMinutes = Math.max(1, Number(autoSyncIntervalMinutes) || 5);
+  }
+  if (enableBotPolling !== void 0) {
+    const prev = db.syncConfig.enableBotPolling;
+    db.syncConfig.enableBotPolling = !!enableBotPolling;
+    if (!prev && db.syncConfig.enableBotPolling) {
+      startTelegramPolling();
+    } else if (prev && !db.syncConfig.enableBotPolling) {
+      stopTelegramPolling();
+    }
+  }
+  addLog(
+    "SYNC_CONFIG",
+    `\u66F4\u65B0\u540C\u6B65\u914D\u7F6E [\u89D2\u8272: ${db.syncConfig.nodeRole}, \u8282\u70B9: ${db.syncConfig.nodeName}, Bot\u8F6E\u8BE2: ${db.syncConfig.enableBotPolling ? "\u5F00\u542F" : "\u5173\u95ED"}]`
+  );
+  saveDatabase(db);
+  return res.json({
+    success: true,
+    syncConfig: db.syncConfig,
+    isBotPollingActive: isPollingRunning
+  });
+});
+app.post("/api/sync/toggle-bot", (req, res) => {
+  const { enable } = req.body || {};
+  const shouldEnable = enable !== void 0 ? !!enable : !db.syncConfig.enableBotPolling;
+  db.syncConfig.enableBotPolling = shouldEnable;
+  if (shouldEnable) {
+    startTelegramPolling();
+  } else {
+    stopTelegramPolling();
+  }
+  addLog("TG_BOT_TOGGLE", `\u5207\u6362\u672C\u8282\u70B9 TG Bot \u8F6E\u8BE2: ${shouldEnable ? "\u5F00\u542F(\u4E91\u7AEF\u5E38\u9A7B)" : "\u505C\u7528(\u907F\u514D\u51B2\u7A81)"}`);
+  saveDatabase(db);
+  return res.json({
+    success: true,
+    enableBotPolling: db.syncConfig.enableBotPolling,
+    isBotPollingActive: isPollingRunning,
+    message: shouldEnable ? "\u2705 \u5DF2\u5F00\u542F\u672C\u8282\u70B9 Telegram Bot \u8F6E\u8BE2\uFF01" : "\u23F8\uFE0F \u5DF2\u6682\u505C\u672C\u8282\u70B9 Telegram Bot \u8F6E\u8BE2 (\u5EFA\u8BAE\u7531\u53E6\u4E00\u5E38\u9A7B\u8282\u70B9\u62C9\u53D6\uFF0C\u9632\u6B62 409 \u51B2\u7A81)"
+  });
+});
+app.get("/api/sync/ping", (req, res) => {
+  const incomingSecret = req.headers["x-sync-secret"] || req.query.secret;
+  const configuredSecret = (db.syncConfig.syncSecret || "").trim();
+  const secretValid = !configuredSecret || incomingSecret === configuredSecret;
+  return res.json({
+    ok: true,
+    secretValid,
+    nodeName: db.syncConfig.nodeName,
+    nodeRole: db.syncConfig.nodeRole,
+    botActive: isPollingRunning,
+    authorizedPhonesCount: db.authorizedPhones.length,
+    usersCount: Object.keys(db.users).length,
+    serverTime: (/* @__PURE__ */ new Date()).toISOString()
+  });
+});
+app.post("/api/sync/test-connection", async (req, res) => {
+  const { remoteUrl, syncSecret } = req.body || {};
+  const cleanUrl = String(remoteUrl || db.syncConfig.remoteUrl || "").trim().replace(/\/+$/, "");
+  const cleanSecret = String(syncSecret !== void 0 ? syncSecret : db.syncConfig.syncSecret || "").trim();
+  if (!cleanUrl) {
+    return res.status(400).json({ error: "\u8BF7\u8F93\u5165\u5BF9\u7AEF\u670D\u52A1\u5668 URL \u5730\u5740 (\u5982 https://username.serv00.net \u6216 http://ip:8080)" });
+  }
+  const startTime = Date.now();
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 7e3);
+    const testUrl = `${cleanUrl}/api/sync/ping?secret=${encodeURIComponent(cleanSecret)}`;
+    const response = await fetch(testUrl, {
+      headers: { "X-Sync-Secret": cleanSecret },
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    const latencyMs = Date.now() - startTime;
+    if (!response.ok) {
+      return res.status(400).json({
+        error: `\u5BF9\u7AEF\u670D\u52A1\u8FD4\u56DE HTTP ${response.status}\uFF0C\u8BF7\u786E\u8BA4\u5BF9\u7AEF\u5DF2\u542F\u52A8\u8BE5\u7A0B\u5E8F\u4E14\u7AEF\u53E3\u5F00\u653E`,
+        latencyMs
+      });
+    }
+    const data = await response.json();
+    if (!data.secretValid) {
+      return res.status(401).json({
+        error: "\u5BF9\u7AEF\u7F51\u7EDC\u5DF2\u8FDE\u901A\uFF0C\u4F46\u901A\u4FE1\u79D8\u94A5 (SYNC_SECRET_KEY) \u4E0D\u5339\u914D\uFF01\u8BF7\u786E\u4FDD\u4E24\u7AEF\u586B\u5199\u4E00\u81F4\u7684\u79D8\u94A5\u3002",
+        latencyMs
+      });
+    }
+    return res.json({
+      success: true,
+      latencyMs,
+      remoteNode: data,
+      message: `\u2705 \u7F51\u7EDC\u8FDE\u901A\u6B63\u5E38\uFF01\u5BF9\u7AEF: ${data.nodeName || cleanUrl} (${data.nodeRole}), \u5F80\u8FD4\u5EF6\u8FDF: ${latencyMs}ms`
+    });
+  } catch (err) {
+    const latencyMs = Date.now() - startTime;
+    const msg = err.name === "AbortError" ? "\u8FDE\u63A5\u8D85\u65F6 (7\u79D2)" : err.message || "\u7F51\u7EDC\u8FDE\u63A5\u4E0D\u53EF\u8FBE";
+    return res.status(500).json({
+      error: `\u65E0\u6CD5\u8FDE\u63A5\u5230 ${cleanUrl} (${msg})\u3002\u8BF7\u6838\u5BF9\u5730\u5740\u3001\u7AEF\u53E3\u3001\u4EE5\u53CA\u5916\u7F51\u7A7F\u900F\u72B6\u6001\u3002`,
+      latencyMs
+    });
+  }
+});
+app.post("/api/sync/execute", async (req, res) => {
+  const { action } = req.body || {};
+  const syncAction = action === "push" || action === "pull" ? action : "two-way";
+  const result = await executeSync(syncAction);
+  return res.json(result);
+});
+app.post("/api/sync/receive", (req, res) => {
+  const incomingSecret = req.headers["x-sync-secret"] || req.body.syncSecret;
+  const configuredSecret = (db.syncConfig.syncSecret || "").trim();
+  if (configuredSecret && incomingSecret !== configuredSecret) {
+    addLog("SYNC_SECURITY", `\u62D2\u7EDD\u672A\u6388\u6743\u7684\u540C\u6B65\u8BF7\u6C42: \u79D8\u94A5\u4E0D\u5339\u914D (\u6765\u81EA ${req.ip})`);
+    return res.status(401).json({ error: "\u901A\u4FE1\u79D8\u94A5 (Sync Secret Key) \u4E0D\u5339\u914D\uFF0C\u62D2\u7EDD\u6570\u636E\u540C\u6B65" });
+  }
+  const { action, senderNode, data } = req.body || {};
+  if (!data || !Array.isArray(data.authorizedPhones) || typeof data.users !== "object") {
+    return res.status(400).json({ error: "\u65E0\u6548\u7684\u6570\u636E\u8F7D\u8377\u683C\u5F0F" });
+  }
+  if (action === "push") {
+    const mergeRes2 = mergeDatabases(
+      { authorizedPhones: db.authorizedPhones, users: db.users },
+      data
+    );
+    db.authorizedPhones = mergeRes2.authorizedPhones;
+    db.users = mergeRes2.users;
+    saveDatabase(db);
+    addLog("DATA_SYNC", `\u63A5\u6536\u5230\u6765\u81EA [${senderNode || "\u5BF9\u7AEF"}] \u7684\u63A8\u9001\uFF0C\u5408\u5E76 ${mergeRes2.mergedUsersCount} \u4F4D\u73A9\u5BB6\u6570\u636E`);
+    return res.json({
+      success: true,
+      nodeName: db.syncConfig.nodeName,
+      message: "\u63A8\u9001\u6570\u636E\u5408\u5E76\u6210\u529F"
+    });
+  }
+  if (action === "pull") {
+    return res.json({
+      success: true,
+      nodeName: db.syncConfig.nodeName,
+      remoteData: {
+        authorizedPhones: db.authorizedPhones,
+        users: db.users
+      }
+    });
+  }
+  const mergeRes = mergeDatabases(
+    { authorizedPhones: db.authorizedPhones, users: db.users },
+    data
+  );
+  db.authorizedPhones = mergeRes.authorizedPhones;
+  db.users = mergeRes.users;
+  db.syncConfig.lastSyncTime = (/* @__PURE__ */ new Date()).toLocaleTimeString();
+  db.syncConfig.lastSyncStatus = "success";
+  db.syncConfig.lastSyncMessage = `\u53CC\u5411\u540C\u6B65\u8FBE\u6210: \u6765\u81EA [${senderNode || "\u5BF9\u7AEF"}]`;
+  saveDatabase(db);
+  addLog("DATA_SYNC", `\u5B8C\u6210\u4E0E [${senderNode || "\u5BF9\u7AEF"}] \u7684\u53CC\u5411\u6570\u636E\u5BF9\u9F50\u5408\u5E76`);
+  return res.json({
+    success: true,
+    nodeName: db.syncConfig.nodeName,
+    nodeRole: db.syncConfig.nodeRole,
+    mergedData: {
+      authorizedPhones: db.authorizedPhones,
+      users: db.users
+    },
+    message: "\u53CC\u5411\u5408\u5E76\u5BF9\u9F50\u6210\u529F"
   });
 });
 var activeRooms = {};
@@ -755,9 +1171,18 @@ async function start() {
   }
   const PORT = port || defaultPort;
   const isProduction = process.env.NODE_ENV === "production";
-  // Prefer dist/ if built, otherwise fallback to web/ (pre-bundled static assets in repo)
   let staticPath = path.resolve("dist");
-  if (!fs.existsSync(path.join(staticPath, "index.html")) && fs.existsSync(path.resolve("web", "index.html"))) {
+  const distIndex = path.join(path.resolve("dist"), "index.html");
+  const webIndex = path.join(path.resolve("web"), "index.html");
+  if (fs.existsSync(distIndex) && fs.existsSync(webIndex)) {
+    try {
+      const distMtime = fs.statSync(distIndex).mtimeMs;
+      const webMtime = fs.statSync(webIndex).mtimeMs;
+      staticPath = distMtime >= webMtime ? path.resolve("dist") : path.resolve("web");
+    } catch (_) {
+      staticPath = path.resolve("dist");
+    }
+  } else if (!fs.existsSync(distIndex) && fs.existsSync(webIndex)) {
     staticPath = path.resolve("web");
   }
   const httpServer = http.createServer(app);
@@ -776,26 +1201,45 @@ async function start() {
       try {
         let template = fs.readFileSync(path.resolve("index.html"), "utf-8");
         template = await vite.transformIndexHtml(url, template);
-        res.status(200).set({ "Content-Type": "text/html" }).end(template);
+        res.status(200).set({
+          "Content-Type": "text/html",
+          "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+          "Pragma": "no-cache",
+          "Expires": "0"
+        }).end(template);
       } catch (e) {
         if (vite.ssrFixStacktrace) vite.ssrFixStacktrace(e);
         next(e);
       }
     });
   } else {
+    app.use((req, res, next) => {
+      const p = req.path;
+      if (p === "/" || p === "/index.html" || p === "/sw.js" || p.endsWith(".webmanifest") || p.endsWith("manifest.json")) {
+        res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
+        res.set("Pragma", "no-cache");
+        res.set("Expires", "0");
+      } else if (p.startsWith("/assets/")) {
+        res.set("Cache-Control", "public, max-age=31536000, immutable");
+      }
+      next();
+    });
     app.use(express.static(staticPath));
     app.get("*", (req, res) => {
       const indexPath = path.join(staticPath, "index.html");
       if (fs.existsSync(indexPath)) {
+        res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
+        res.set("Pragma", "no-cache");
+        res.set("Expires", "0");
         res.sendFile(indexPath);
       } else {
         res.status(200).send(`<!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><title>经典4人锄大地 & 烟三</title></head>
+<head><meta charset="utf-8"><title>\u7ECF\u51784\u4EBA\u9504\u5927\u5730 & \u70DF\u4E09</title></head>
 <body style="background:#031d14;color:#e2e8f0;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center;">
   <div style="background:rgba(20,83,57,0.9);border:1px solid #10b981;padding:2.5rem;border-radius:1rem;max-width:480px;box-shadow:0 10px 25px rgba(0,0,0,0.5);">
-    <h2 style="color:#fbbf24;margin-top:0;">🚀 锄大地服务端运行中</h2>
-    <p style="color:#cbd5e1;line-height:1.6;">检测到前端静态资源正在准备中。请在终端执行 <code>npm run build</code> 进行前端编译打包，或稍后刷新页面。</p>
+    <h2 style="color:#fbbf24;margin-top:0;">\u{1F680} \u9504\u5927\u5730\u670D\u52A1\u7AEF\u8FD0\u884C\u4E2D</h2>
+    <p style="color:#cbd5e1;line-height:1.6;">\u68C0\u6D4B\u5230\u524D\u7AEF\u9759\u6001\u8D44\u6E90\u6B63\u5728\u51C6\u5907\u4E2D\u3002\u8BF7\u5728\u7EC8\u7AEF\u6267\u884C <code>npm run build</code> \u8FDB\u884C\u524D\u7AEF\u7F16\u8BD1\u6253\u5305\uFF0C\u6216\u7A0D\u540E\u5237\u65B0\u9875\u9762\u3002</p>
   </div>
 </body>
 </html>`);
