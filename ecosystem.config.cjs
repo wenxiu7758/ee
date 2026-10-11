@@ -2,14 +2,52 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-// 1. 智能定位游戏项目目录 (支持放置于 ~ 根目录或 dd 项目内，防止 git pull 时被覆盖)
+// 1. 智能定位游戏项目目录 (支持放置于 ~ 根目录、ee、dd 等任意项目目录，防止 git pull 时被覆盖)
 let gameDir = __dirname;
-if (fs.existsSync(path.resolve(__dirname, 'dd', 'package.json'))) {
-  gameDir = path.resolve(__dirname, 'dd');
-} else if (fs.existsSync(path.resolve(__dirname, 'package.json'))) {
+if (fs.existsSync(path.resolve(__dirname, 'package.json')) && (fs.existsSync(path.resolve(__dirname, 'server.js')) || fs.existsSync(path.resolve(__dirname, 'server.ts')))) {
   gameDir = __dirname;
-} else if (process.env.HOME && fs.existsSync(path.resolve(process.env.HOME, 'dd', 'package.json'))) {
-  gameDir = path.resolve(process.env.HOME, 'dd');
+} else {
+  // 扫描可能的子目录（如 ee, dd, chudadi 等）或包含 package.json 的子目录
+  const searchBases = [__dirname, process.env.HOME].filter(Boolean);
+  let found = false;
+  for (const base of searchBases) {
+    const candidateNames = ['ee', 'dd', 'chudadi', 'yansan', 'game'];
+    for (const name of candidateNames) {
+      const p = path.resolve(base, name);
+      if (fs.existsSync(path.resolve(p, 'package.json'))) {
+        gameDir = p;
+        found = true;
+        break;
+      }
+    }
+    if (found) break;
+
+    try {
+      const items = fs.readdirSync(base, { withFileTypes: true });
+      for (const item of items) {
+        if (item.isDirectory() && !item.name.startsWith('.')) {
+          const sub = path.resolve(base, item.name);
+          if (fs.existsSync(path.resolve(sub, 'package.json')) && (fs.existsSync(path.resolve(sub, 'server.js')) || fs.existsSync(path.resolve(sub, 'server.ts')))) {
+            gameDir = sub;
+            found = true;
+            break;
+          }
+        }
+      }
+    } catch (_) {}
+    if (found) break;
+  }
+}
+
+// 确保前端资源可用：如果 dist/index.html 不存在，自动从预构建 web 目录同步
+const distIndexPath = path.resolve(gameDir, 'dist', 'index.html');
+const webIndexPath = path.resolve(gameDir, 'web', 'index.html');
+if (!fs.existsSync(distIndexPath) && fs.existsSync(webIndexPath)) {
+  try {
+    const distDirPath = path.resolve(gameDir, 'dist');
+    if (!fs.existsSync(distDirPath)) fs.mkdirSync(distDirPath, { recursive: true });
+    execSync('cp -r web/* dist/', { cwd: gameDir });
+  } catch (_) {}
 }
 
 // 2. 自动检测并编译缺失或为空的 server.js

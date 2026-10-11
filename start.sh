@@ -32,6 +32,9 @@ elif [ -f ".env" ]; then
     set +a
 fi
 
+# 自动确保二进制执行权限
+chmod +x ./bin/* ./server start.sh 2>/dev/null || true
+
 # 检测系统架构与预编译 Go 二进制
 GO_BIN=""
 ARCH=$(uname -m)
@@ -68,9 +71,21 @@ else
         npm install --legacy-peer-deps
     fi
 
-    if [ ! -f "dist/index.html" ] && [ ! -d "web" ]; then
-        echo "⚡ 正在构建前端 (npm run build)..."
-        npm run build || true
+    echo -e "\033[33;1m[3/3] 检查前端静态资源 (dist)...\033[0m"
+    if [ ! -f "dist/index.html" ]; then
+        if [ -f "web/index.html" ]; then
+            echo "⚡ 正在从预构建 web 目录同步到 dist/..."
+            mkdir -p dist
+            cp -r web/* dist/ 2>/dev/null || true
+        else
+            echo "⚡ 正在构建前端 (npm run build)..."
+            npm run build || true
+        fi
+    fi
+
+    if [ ! -f "server.js" ] || [ ! -s "server.js" ]; then
+        echo "⚡ 正在构建 server.js (node build-server.js)..."
+        node build-server.js || true
     fi
 fi
 

@@ -755,7 +755,11 @@ async function start() {
   }
   const PORT = port || defaultPort;
   const isProduction = process.env.NODE_ENV === "production";
-  const distPath = path.resolve("dist");
+  // Prefer dist/ if built, otherwise fallback to web/ (pre-bundled static assets in repo)
+  let staticPath = path.resolve("dist");
+  if (!fs.existsSync(path.join(staticPath, "index.html")) && fs.existsSync(path.resolve("web", "index.html"))) {
+    staticPath = path.resolve("web");
+  }
   const httpServer = http.createServer(app);
   if (!isProduction) {
     const { createServer: createViteServer } = await import("vite");
@@ -779,9 +783,23 @@ async function start() {
       }
     });
   } else {
-    app.use(express.static(distPath));
+    app.use(express.static(staticPath));
     app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+      const indexPath = path.join(staticPath, "index.html");
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        res.status(200).send(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>经典4人锄大地 & 烟三</title></head>
+<body style="background:#031d14;color:#e2e8f0;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center;">
+  <div style="background:rgba(20,83,57,0.9);border:1px solid #10b981;padding:2.5rem;border-radius:1rem;max-width:480px;box-shadow:0 10px 25px rgba(0,0,0,0.5);">
+    <h2 style="color:#fbbf24;margin-top:0;">🚀 锄大地服务端运行中</h2>
+    <p style="color:#cbd5e1;line-height:1.6;">检测到前端静态资源正在准备中。请在终端执行 <code>npm run build</code> 进行前端编译打包，或稍后刷新页面。</p>
+  </div>
+</body>
+</html>`);
+      }
     });
   }
   httpServer.listen(PORT, "0.0.0.0", () => {
