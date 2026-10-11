@@ -1,0 +1,235 @@
+name: Build Android APK (烟三)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+# Grant permission to write releases using the built-in GITHUB_TOKEN (No secrets needed!)
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    name: Build & Package Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: |
+          npm install
+
+      - name: Build Web Assets & Generate Brand Icons
+        run: |
+          node scripts/generate-pwa-icons.js
+          npm run build
+
+      - name: Setup Java JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: 21
+          cache: 'gradle'
+
+      - name: Accept Android SDK Licenses
+        run: |
+          yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses 2>/dev/null || yes | sdkmanager --licenses 2>/dev/null || true
+
+      - name: Ensure Android Platform & Capacitor Sync
+        run: |
+          # If android directory or gradlew is missing, cleanly add platform
+          if [ ! -f "android/gradlew" ]; then
+            echo "android/gradlew not found. Initializing Capacitor Android platform..."
+            rm -rf android
+            npx cap add android
+          fi
+
+          # Sync web distribution to Android project
+          npx cap sync android
+
+          # Re-apply brand icons to all mipmap densities
+          node scripts/generate-pwa-icons.js
+
+          # Ensure gradlew executable permission
+          if [ -f "android/gradlew" ]; then
+            chmod +x android/gradlew
+          fi
+
+      - name: Configure Android Immersive Landscape, Resources & Keystore
+        run: |
+          # 1. Ensure package folder exists
+          mkdir -p android/app/src/main/java/com/game/yansan
+          
+          # 2. Immersive Sticky MainActivity.java
+          cat << 'EOF' > android/app/src/main/java/com/game/yansan/MainActivity.java
+          package com.game.yansan;
+
+          import android.os.Build;
+          import android.os.Bundle;
+          import android.view.View;
+          import android.view.Window;
+          import android.view.WindowManager;
+          import androidx.core.view.WindowCompat;
+          import androidx.core.view.WindowInsetsCompat;
+          import androidx.core.view.WindowInsetsControllerCompat;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+              @Override
+              public void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  setupImmersiveMode();
+              }
+
+              @Override
+              public void onWindowFocusChanged(boolean hasFocus) {
+                  super.onWindowFocusChanged(hasFocus);
+                  if (hasFocus) {
+                      setupImmersiveMode();
+                  }
+              }
+
+              @Override
+              public void onResume() {
+                  super.onResume();
+                  setupImmersiveMode();
+              }
+
+              private void setupImmersiveMode() {
+                  Window window = getWindow();
+                  if (window == null) return;
+
+                  window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                      WindowManager.LayoutParams lp = window.getAttributes();
+                      lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+                      window.setAttributes(lp);
+                  }
+
+                  WindowCompat.setDecorFitsSystemWindows(window, false);
+                  WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(window, window.getDecorView());
+                  if (controller != null) {
+                      controller.hide(WindowInsetsCompat.Type.systemBars());
+                      controller.setSystemBarsBehavior(WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+                  }
+
+                  View decorView = window.getDecorView();
+                  if (decorView != null) {
+                      int uiOptions = View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                              | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                              | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                              | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                              | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                              | View.SYSTEM_UI_FLAG_FULLSCREEN;
+                      decorView.setSystemUiVisibility(uiOptions);
+                  }
+              }
+          }
+          EOF
+
+          # 3. Ensure App Name strings & AAPT2 colors (Remove duplicate ic_launcher_background.xml)
+          mkdir -p android/app/src/main/res/values
+          rm -f android/app/src/main/res/values/ic_launcher_background.xml
+
+          cat << 'EOF' > android/app/src/main/res/values/strings.xml
+          <?xml version='1.0' encoding='utf-8'?>
+          <resources>
+              <string name="app_name">烟三</string>
+              <string name="title_activity_main">烟三</string>
+              <string name="package_name">com.game.yansan</string>
+              <string name="custom_url_scheme">com.game.yansan</string>
+          </resources>
+          EOF
+
+          cat << 'EOF' > android/app/src/main/res/values/colors.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <color name="colorPrimary">#064e3b</color>
+              <color name="colorPrimaryDark">#022c22</color>
+              <color name="colorAccent">#fbbf24</color>
+              <color name="ic_launcher_background">#050b14</color>
+          </resources>
+          EOF
+
+          # 4. Generate Release Keystore (Self-contained, no secrets needed!)
+          mkdir -p android/app
+          if [ ! -f android/app/release.jks ]; then
+            keytool -genkeypair -v -keystore android/app/release.jks \
+              -alias yansan \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass yansan888 \
+              -keypass yansan888 \
+              -dname "CN=yansan, OU=Game, O=Yansan, L=Shenzhen, ST=Guangdong, C=CN"
+            echo "Release keystore created successfully."
+          fi
+
+      - name: Build Debug and Release APKs
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew --version
+          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleRelease --stacktrace
+
+      - name: Organize Output APK Files
+        run: |
+          mkdir -p output-apks
+          # Find and copy release APK
+          find android/app/build/outputs/apk -name "*release*.apk" -exec cp {} output-apks/yansan-release.apk \; || true
+          
+          # Find and copy debug APK
+          find android/app/build/outputs/apk -name "*debug*.apk" -exec cp {} output-apks/yansan-debug.apk \; || true
+
+          echo "Generated APKs list:"
+          ls -lh output-apks/
+
+      - name: Upload APKs as Artifact (Direct Download from Actions)
+        uses: actions/upload-artifact@v4
+        with:
+          name: yansan-android-apks
+          path: output-apks/*.apk
+          retention-days: 30
+          overwrite: true
+
+      - name: Create or Update Release (Fixed 'latest' tag without version stacking)
+        uses: softprops/action-gh-release@v2
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        with:
+          tag_name: "latest"
+          name: "烟三 最新版 APK 下载"
+          body: |
+            ### ♠️ 烟三 Android 游戏安装包（自动更新覆盖）
+            
+            本版本为仓库最新代码自动打包生成，每次推送代码均会自动覆盖此页面文件，无需手动清理旧版本：
+            
+            - **正式版（推荐安装）**：[yansan-release.apk](https://github.com/${{ github.repository }}/releases/download/latest/yansan-release.apk)
+            - **测试版（调试可用）**：[yansan-debug.apk](https://github.com/${{ github.repository }}/releases/download/latest/yansan-debug.apk)
+            
+            #### 📱 体验特性：
+            1. **沉浸式全屏**：自动隐藏顶部状态栏与底部虚拟按键；
+            2. **横屏适配**：支持手机传感器左右旋转横屏；
+            3. **真机性能**：原生 WebView 硬件加速，流畅无卡顿；
+            4. **离线与联机**：支持本地 AI 对局与创建/加入好友房间联机对战。
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+          files: |
+            output-apks/yansan-release.apk
+            output-apks/yansan-debug.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

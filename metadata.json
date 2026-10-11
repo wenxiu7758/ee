@@ -1,0 +1,8 @@
+{
+  "name": "Remix  dd复刻锄大地烟三2",
+  "description": "Deploy a Go-based Dou Dizhu card game directly on your Termux environment.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

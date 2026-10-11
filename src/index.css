@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+  background-color: #031d14;
+  color: #e2e8f0;
+}
+
+/* 适配刘海屏、全面屏 Home 手势指示横条安全区 */
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+}
+
+@keyframes policeFlash {
+  0%, 100% {
+    border-color: #ef4444;
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.9), inset 0 0 10px rgba(239, 68, 68, 0.5);
+  }
+  50% {
+    border-color: #3b82f6;
+    box-shadow: 0 0 15px rgba(59, 130, 246, 0.9), inset 0 0 10px rgba(59, 130, 246, 0.5);
+  }
+}
+
+.animate-police-flash {
+  animation: policeFlash 0.7s infinite ease-in-out;
+}
+
+@keyframes policeBadgeStrobe {
+  0%, 100% {
+    background-color: #dc2626;
+    border-color: #fca5a5;
+    color: #fef08a;
+    box-shadow: 0 0 16px rgba(239, 68, 68, 1), 0 0 30px rgba(239, 68, 68, 0.6);
+  }
+  50% {
+    background-color: #1d4ed8;
+    border-color: #93c5fd;
+    color: #ffffff;
+    box-shadow: 0 0 16px rgba(37, 99, 235, 1), 0 0 30px rgba(37, 99, 235, 0.6);
+  }
+}
+
+.animate-police-badge {
+  animation: policeBadgeStrobe 0.5s infinite ease-in-out;
+}
+
+/* Custom Gaming Scrollbar for eye-friendly themes */
+.custom-scrollbar {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(3, 29, 20, 0.7);
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(16, 185, 129, 0.4);
+  border-radius: 9999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(245, 158, 11, 0.8);
+}
