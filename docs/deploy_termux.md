@@ -495,4 +495,12 @@ pm2 restart chudadi-game
 
 ---
 
+### Q6: 运行 `npm run build` 报错 `Cannot find module @rollup/rollup-android-arm64`？
+- **原因**：Termux (Android) 环境下 npm 存在对可选依赖的已知 Bug (#4828)，导致 Rollup 原生二进制未自动安装。
+- **解决办法**：
+  1. **免构建直接运行（推荐）**：本项目已随仓库附带完整的预构建静态资源 `web/`，在 Termux 下**完全无需手动运行 `npm run build`**！直接运行 `./start.sh` 或 `npm start` 即可秒级启动。
+  2. **如果确实想重新编译**：更新最新代码（`git pull`）后，`vite.config.ts` 已内置 Termux 自动容灾降级机制，再次执行 `npm run build` 即可顺利完成打包！
+
+---
+
 🎉 **祝您在手机 Termux 上部署顺利，与好友畅享经典 4 人锄大地的博弈乐趣！**
