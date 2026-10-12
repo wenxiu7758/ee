@@ -72,13 +72,10 @@ else
     fi
 
     echo -e "\033[33;1m[3/3] 检查前端静态资源 (dist/web)...\033[0m"
-    if [ -f "web/index.html" ]; then
-        echo "⚡ 正在从最新预构建 web 目录同步到 dist/..."
+    if [ ! -f "dist/index.html" ] && [ -f "web/index.html" ]; then
+        echo "⚡ 正在从预构建 web 目录同步到 dist/..."
         mkdir -p dist
         cp -rf web/* dist/ 2>/dev/null || true
-    elif [ ! -f "dist/index.html" ]; then
-        echo "⚡ 正在构建前端 (npm run build)..."
-        npm run build || true
     fi
 
     if [ ! -f "server.js" ] || [ ! -s "server.js" ]; then

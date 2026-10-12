@@ -1555,8 +1555,24 @@ async function start() {
   const PORT = port || defaultPort;
 
   const isProduction = process.env.NODE_ENV === 'production';
-  // 生产环境下优先使用经过完整打包与仓库维护的 web/ 目录，杜绝未完成构建的 dist/ 污染
-  let staticPath = fs.existsSync(path.resolve('web', 'index.html')) ? path.resolve('web') : path.resolve('dist');
+  // 生产环境下静态资源托管目录定位（优先选择最新编译产物）
+  let staticPath = path.resolve('dist');
+  const distIndexPath = path.resolve('dist', 'index.html');
+  const webIndexPath = path.resolve('web', 'index.html');
+
+  if (fs.existsSync(distIndexPath) && fs.existsSync(webIndexPath)) {
+    try {
+      const distMtime = fs.statSync(distIndexPath).mtimeMs;
+      const webMtime = fs.statSync(webIndexPath).mtimeMs;
+      staticPath = distMtime >= webMtime ? path.resolve('dist') : path.resolve('web');
+    } catch (_) {
+      staticPath = path.resolve('dist');
+    }
+  } else if (fs.existsSync(distIndexPath)) {
+    staticPath = path.resolve('dist');
+  } else if (fs.existsSync(webIndexPath)) {
+    staticPath = path.resolve('web');
+  }
   console.log(`📁 生产静态资源托管目录: ${staticPath}`);
   const httpServer = http.createServer(app);
 

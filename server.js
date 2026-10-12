@@ -1183,7 +1183,22 @@ async function start() {
   }
   const PORT = port || defaultPort;
   const isProduction = process.env.NODE_ENV === "production";
-  let staticPath = fs.existsSync(path.resolve("web", "index.html")) ? path.resolve("web") : path.resolve("dist");
+  let staticPath = path.resolve("dist");
+  const distIndexPath = path.resolve("dist", "index.html");
+  const webIndexPath = path.resolve("web", "index.html");
+  if (fs.existsSync(distIndexPath) && fs.existsSync(webIndexPath)) {
+    try {
+      const distMtime = fs.statSync(distIndexPath).mtimeMs;
+      const webMtime = fs.statSync(webIndexPath).mtimeMs;
+      staticPath = distMtime >= webMtime ? path.resolve("dist") : path.resolve("web");
+    } catch (_) {
+      staticPath = path.resolve("dist");
+    }
+  } else if (fs.existsSync(distIndexPath)) {
+    staticPath = path.resolve("dist");
+  } else if (fs.existsSync(webIndexPath)) {
+    staticPath = path.resolve("web");
+  }
   console.log(`\u{1F4C1} \u751F\u4EA7\u9759\u6001\u8D44\u6E90\u6258\u7BA1\u76EE\u5F55: ${staticPath}`);
   const httpServer = http.createServer(app);
   if (!isProduction) {
