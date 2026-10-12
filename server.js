@@ -1171,20 +1171,8 @@ async function start() {
   }
   const PORT = port || defaultPort;
   const isProduction = process.env.NODE_ENV === "production";
-  let staticPath = path.resolve("dist");
-  const distIndex = path.join(path.resolve("dist"), "index.html");
-  const webIndex = path.join(path.resolve("web"), "index.html");
-  if (fs.existsSync(distIndex) && fs.existsSync(webIndex)) {
-    try {
-      const distMtime = fs.statSync(distIndex).mtimeMs;
-      const webMtime = fs.statSync(webIndex).mtimeMs;
-      staticPath = distMtime >= webMtime ? path.resolve("dist") : path.resolve("web");
-    } catch (_) {
-      staticPath = path.resolve("dist");
-    }
-  } else if (!fs.existsSync(distIndex) && fs.existsSync(webIndex)) {
-    staticPath = path.resolve("web");
-  }
+  let staticPath = fs.existsSync(path.resolve("web", "index.html")) ? path.resolve("web") : path.resolve("dist");
+  console.log(`\u{1F4C1} \u751F\u4EA7\u9759\u6001\u8D44\u6E90\u6258\u7BA1\u76EE\u5F55: ${staticPath}`);
   const httpServer = http.createServer(app);
   if (!isProduction) {
     const { createServer: createViteServer } = await import("vite");

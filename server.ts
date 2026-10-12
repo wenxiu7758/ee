@@ -1541,21 +1541,9 @@ async function start() {
   const PORT = port || defaultPort;
 
   const isProduction = process.env.NODE_ENV === 'production';
-  // 智能选择最新构建的前端目录（优先比较 dist 与 web 的时间戳，确保加载最新产物）
-  let staticPath = path.resolve('dist');
-  const distIndex = path.join(path.resolve('dist'), 'index.html');
-  const webIndex = path.join(path.resolve('web'), 'index.html');
-  if (fs.existsSync(distIndex) && fs.existsSync(webIndex)) {
-    try {
-      const distMtime = fs.statSync(distIndex).mtimeMs;
-      const webMtime = fs.statSync(webIndex).mtimeMs;
-      staticPath = distMtime >= webMtime ? path.resolve('dist') : path.resolve('web');
-    } catch (_) {
-      staticPath = path.resolve('dist');
-    }
-  } else if (!fs.existsSync(distIndex) && fs.existsSync(webIndex)) {
-    staticPath = path.resolve('web');
-  }
+  // 生产环境下优先使用经过完整打包与仓库维护的 web/ 目录，杜绝未完成构建的 dist/ 污染
+  let staticPath = fs.existsSync(path.resolve('web', 'index.html')) ? path.resolve('web') : path.resolve('dist');
+  console.log(`📁 生产静态资源托管目录: ${staticPath}`);
   const httpServer = http.createServer(app);
 
   if (!isProduction) {

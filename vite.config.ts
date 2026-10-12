@@ -18,8 +18,21 @@ try {
 
 // 在 Termux 等缺少 Rollup 原生编译支持的环境下，提供轻量 PWA 资产兜底插件
 function termuxPwaFallbackPlugin(): Plugin {
+  const virtualId = 'virtual:pwa-register';
+  const resolvedVirtualId = '\0' + virtualId;
+
   return {
     name: 'termux-pwa-fallback',
+    resolveId(id) {
+      if (id === virtualId) {
+        return resolvedVirtualId;
+      }
+    },
+    load(id) {
+      if (id === resolvedVirtualId) {
+        return 'export function registerSW() { return () => {}; }; export default registerSW;';
+      }
+    },
     closeBundle() {
       const distDir = path.resolve('dist');
       const webDir = path.resolve('web');

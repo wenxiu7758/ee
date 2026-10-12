@@ -40,6 +40,26 @@
           e.preventDefault();
         }
       });
+      // PWA 自动清理旧版缓存与 Service Worker 强行刷新机制
+      (function() {
+        var APP_VER = '20261011_v5';
+        try {
+          var cur = localStorage.getItem('__app_cache_ver__');
+          if (cur !== APP_VER) {
+            localStorage.setItem('__app_cache_ver__', APP_VER);
+            if ('caches' in window) {
+              caches.keys().then(function(keys) {
+                keys.forEach(function(k) { caches.delete(k); });
+              });
+            }
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.getRegistrations().then(function(regs) {
+                regs.forEach(function(r) { r.unregister(); });
+              });
+            }
+          }
+        } catch (_) {}
+      })();
     </script>
   </head>
   <body>
