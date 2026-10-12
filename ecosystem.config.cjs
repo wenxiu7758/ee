@@ -39,15 +39,22 @@ if (fs.existsSync(path.resolve(__dirname, 'package.json')) && (fs.existsSync(pat
   }
 }
 
-// 确保前端资源可用并保持最新：若 dist 不存在或为空，则从预构建 web 目录同步到 dist
+// 确保前端资源可用并保持最新：若 dist 不存在或 web 目录较新，则从预构建 web 目录同步到 dist
 const distIndexPath = path.resolve(gameDir, 'dist', 'index.html');
 const webIndexPath = path.resolve(gameDir, 'web', 'index.html');
 if (fs.existsSync(webIndexPath)) {
   try {
     const distDirPath = path.resolve(gameDir, 'dist');
     if (!fs.existsSync(distDirPath)) fs.mkdirSync(distDirPath, { recursive: true });
-    // 仅当 dist/index.html 不存在时才从 web 复制，绝不覆盖用户自主编译或最新生成的 dist
-    if (!fs.existsSync(distIndexPath)) {
+    let shouldSync = !fs.existsSync(distIndexPath);
+    if (!shouldSync) {
+      try {
+        const webMtime = fs.statSync(webIndexPath).mtimeMs;
+        const distMtime = fs.statSync(distIndexPath).mtimeMs;
+        if (webMtime > distMtime) shouldSync = true;
+      } catch (_) {}
+    }
+    if (shouldSync) {
       execSync('cp -rf web/* dist/', { cwd: gameDir });
     }
   } catch (_) {}

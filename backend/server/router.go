@@ -205,7 +205,46 @@ func (s *Server) handleStaticAndSPA(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. Try embedded web filesystem first (primary distribution)
+	// 1. Try local disk dist/ or web/ folders first (allows dynamic git pull and npm run build updates without recompiling Go)
+	diskDirs := []string{"dist", "web"}
+	if s.cfg != nil && s.cfg.DistDir != "" {
+		diskDirs = []string{s.cfg.DistDir, "dist", "web"}
+	}
+
+	for _, dir := range diskDirs {
+		targetPath := filepath.Join(dir, cleanPath)
+		info, err := os.Stat(targetPath)
+		if err == nil && !info.IsDir() {
+			ext := filepath.Ext(targetPath)
+			if mimeType := mime.TypeByExtension(ext); mimeType != "" {
+				w.Header().Set("Content-Type", mimeType)
+			}
+			if strings.HasPrefix(cleanPath, "/assets/") {
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			} else {
+				w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0")
+				w.Header().Set("Pragma", "no-cache")
+				w.Header().Set("Expires", "0")
+			}
+			http.ServeFile(w, r, targetPath)
+			return
+		}
+	}
+
+	// Check SPA index.html on disk
+	for _, dir := range diskDirs {
+		indexPath := filepath.Join(dir, "index.html")
+		if _, err := os.Stat(indexPath); err == nil {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0")
+			w.Header().Set("Pragma", "no-cache")
+			w.Header().Set("Expires", "0")
+			http.ServeFile(w, r, indexPath)
+			return
+		}
+	}
+
+	// 2. Fallback to embedded web filesystem if disk folders are absent
 	if s.subFS != nil {
 		relPath := strings.TrimPrefix(cleanPath, "/")
 		if relPath == "" || relPath == "." {
@@ -218,15 +257,16 @@ func (s *Server) handleStaticAndSPA(w http.ResponseWriter, r *http.Request) {
 			stat, statErr := file.Stat()
 			_ = file.Close()
 			if statErr == nil && !stat.IsDir() {
-				// Cache control: long cache for hashed assets, no-cache for entry/manifest
 				ext := filepath.Ext(relPath)
 				if mimeType := mime.TypeByExtension(ext); mimeType != "" {
 					w.Header().Set("Content-Type", mimeType)
 				}
 				if strings.HasPrefix(cleanPath, "/assets/") {
 					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-				} else if relPath == "index.html" || relPath == "sw.js" || strings.HasSuffix(relPath, "manifest.json") || strings.HasSuffix(relPath, ".webmanifest") {
-					w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+				} else {
+					w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0")
+					w.Header().Set("Pragma", "no-cache")
+					w.Header().Set("Expires", "0")
 				}
 				http.FileServer(http.FS(s.subFS)).ServeHTTP(w, r)
 				return
@@ -237,34 +277,11 @@ func (s *Server) handleStaticAndSPA(w http.ResponseWriter, r *http.Request) {
 		indexData, err := fs.ReadFile(s.subFS, "index.html")
 		if err == nil {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0")
+			w.Header().Set("Pragma", "no-cache")
+			w.Header().Set("Expires", "0")
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write(indexData)
-			return
-		}
-	}
-
-	// 2. Fallback to local dist/ folder on disk if present (for local Vite dev)
-	if s.cfg != nil && s.cfg.DistDir != "" {
-		targetPath := filepath.Join(s.cfg.DistDir, cleanPath)
-		info, err := os.Stat(targetPath)
-		if err == nil && !info.IsDir() {
-			ext := filepath.Ext(targetPath)
-			if mimeType := mime.TypeByExtension(ext); mimeType != "" {
-				w.Header().Set("Content-Type", mimeType)
-			}
-			if strings.HasPrefix(cleanPath, "/assets/") {
-				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-			}
-			http.ServeFile(w, r, targetPath)
-			return
-		}
-
-		indexPath := filepath.Join(s.cfg.DistDir, "index.html")
-		if _, err := os.Stat(indexPath); err == nil {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-			http.ServeFile(w, r, indexPath)
 			return
 		}
 	}

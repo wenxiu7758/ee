@@ -72,10 +72,12 @@ else
     fi
 
     echo -e "\033[33;1m[3/3] 检查前端静态资源 (dist/web)...\033[0m"
-    if [ ! -f "dist/index.html" ] && [ -f "web/index.html" ]; then
-        echo "⚡ 正在从预构建 web 目录同步到 dist/..."
-        mkdir -p dist
-        cp -rf web/* dist/ 2>/dev/null || true
+    if [ -f "web/index.html" ]; then
+        if [ ! -f "dist/index.html" ] || [ "web/index.html" -nt "dist/index.html" ]; then
+            echo "⚡ 正在从更新的预构建 web 目录同步到 dist/..."
+            mkdir -p dist
+            cp -rf web/* dist/ 2>/dev/null || true
+        fi
     fi
 
     if [ ! -f "server.js" ] || [ ! -s "server.js" ]; then
