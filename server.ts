@@ -2,7 +2,21 @@ import express from 'express';
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
+import module from 'node:module';
 import dotenv from 'dotenv';
+
+// Patch createRequire for bundlers (like esbuild/vite) that pass '.' as __dirname to createRequire
+const origCreateRequire = module.createRequire;
+module.createRequire = function (target: string | URL) {
+  if (typeof target === 'string' && (target === '.' || target === './' || !path.isAbsolute(target))) {
+    try {
+      new URL(target);
+    } catch {
+      target = path.resolve(process.cwd(), target, 'package.json');
+    }
+  }
+  return origCreateRequire(target);
+};
 
 // ---------------- LOAD .ENV FROM MULTIPLE LOCATIONS ----------------
 // Supports Termux root directory (~/.env or ../.env above 'dd') and local dir ('./.env')
@@ -1586,7 +1600,15 @@ async function start() {
       next();
     });
 
-    app.use(express.static(staticPath));
+    app.use(express.static(staticPath, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('index.html') || filePath.endsWith('sw.js') || filePath.endsWith('manifest.json') || filePath.endsWith('manifest.webmanifest')) {
+          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+          res.setHeader('Pragma', 'no-cache');
+          res.setHeader('Expires', '0');
+        }
+      }
+    }));
     app.get('*', (req, res) => {
       const indexPath = path.join(staticPath, 'index.html');
       if (fs.existsSync(indexPath)) {

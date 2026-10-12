@@ -39,14 +39,26 @@ if (fs.existsSync(path.resolve(__dirname, 'package.json')) && (fs.existsSync(pat
   }
 }
 
-// 确保前端资源可用：如果 dist/index.html 不存在，自动从预构建 web 目录同步
+// 确保前端资源可用并保持最新：自动从预构建 web 目录同步到 dist
 const distIndexPath = path.resolve(gameDir, 'dist', 'index.html');
 const webIndexPath = path.resolve(gameDir, 'web', 'index.html');
-if (!fs.existsSync(distIndexPath) && fs.existsSync(webIndexPath)) {
+if (fs.existsSync(webIndexPath)) {
   try {
     const distDirPath = path.resolve(gameDir, 'dist');
     if (!fs.existsSync(distDirPath)) fs.mkdirSync(distDirPath, { recursive: true });
-    execSync('cp -r web/* dist/', { cwd: gameDir });
+    let shouldSync = !fs.existsSync(distIndexPath);
+    if (!shouldSync) {
+      try {
+        const webMtime = fs.statSync(webIndexPath).mtimeMs;
+        const distMtime = fs.statSync(distIndexPath).mtimeMs;
+        if (webMtime >= distMtime) shouldSync = true;
+      } catch (_) {
+        shouldSync = true;
+      }
+    }
+    if (shouldSync) {
+      execSync('cp -rf web/* dist/', { cwd: gameDir });
+    }
   } catch (_) {}
 }
 
