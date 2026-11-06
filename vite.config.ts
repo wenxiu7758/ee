@@ -719,73 +719,60 @@ function chessWebSocketPlugin(): Plugin {
               return;
             }
 
-            const roomAutoFillTimers = new Map<string, any>();
-
-            function scheduleAutoFillRoom(roomId: string) {
-              if (roomAutoFillTimers.has(roomId)) {
-                clearTimeout(roomAutoFillTimers.get(roomId));
+            function getSceneRequiredCoins(gType: string, sMode: string): number {
+              if (gType === 'yansan') {
+                if (sMode === 'yansan-20-40') return 500;
+                if (sMode === 'yansan-10-20') return 200;
+                return 100;
               }
-              const timer = setTimeout(() => {
-                roomAutoFillTimers.delete(roomId);
-                const room = sceneWaitingRooms.get(roomId);
-                if (!room || room.status === 'playing' || room.status === 'starting') return;
-
-                const botNames = ['九州逸客', '浮生半日', '云水禅心', '竹林听风', '江枫渔火', '松下问童', '沧海一声', '问鼎中原'];
-                const botAvatars = ['🧙‍♂️', '🥷', '🕵️‍♂️', '👲', '🧔‍♂️', '👨‍💼', '🧑‍🌾', '👑'];
-
-                while (room.players.length < room.maxPlayers) {
-                  const seat = room.players.length;
-                  const bName = botNames[(seat + Math.floor(Math.random() * 4)) % botNames.length];
-                  const bAvatar = botAvatars[(seat + Math.floor(Math.random() * 4)) % botAvatars.length];
-                  room.players.push({
-                    id: `P-bot-${Date.now()}-${seat}-${Math.random().toString(36).slice(2, 6)}`,
-                    name: bName,
-                    avatar: bAvatar,
-                    rating: 1850 + Math.floor(Math.random() * 200),
-                    coins: 2000 + Math.floor(Math.random() * 5000),
-                    seat,
-                    isSimulated: true,
-                    isReady: true,
-                  });
-                }
-
-                console.log(`🤖 [极速补齐满员] 房间 ${room.id} (${room.gameType}-${room.sceneMode}) 已自动补齐 ${room.players.length}/${room.maxPlayers} 席位，触发自动开局！`);
-                startRoomGameIfFull(room);
-              }, 1500);
-              roomAutoFillTimers.set(roomId, timer);
+              if (gType === 'shisanshui') {
+                if (sMode === 'eight-realtime' || sMode === 'eight-booking') return 500;
+                if (sMode === 'shisanshui-10-20') return 200;
+                return 100;
+              }
+              if (gType === 'mahjong') {
+                if (sMode === 'mahjong-20-40') return 500;
+                if (sMode === 'mahjong-10-20') return 200;
+                return 100;
+              }
+              return 100;
             }
 
             function startRoomGameIfFull(room: any) {
               if (!room) return false;
-              if (roomAutoFillTimers.has(room.id)) {
-                clearTimeout(roomAutoFillTimers.get(room.id));
-                roomAutoFillTimers.delete(room.id);
+
+              // 1. 防重复开局保护：若房间处于 starting 或 playing 状态，立刻锁定并返回
+              if (room.status === 'starting' || room.status === 'playing') {
+                return true;
               }
 
-              if (room.players.length >= room.maxPlayers) {
-                // If already in starting or playing with a deal, do not double-init
-                if (room.status === 'starting' || room.status === 'playing') {
-                  return true;
+              if (Array.isArray(room.players) && room.players.length >= room.maxPlayers) {
+                // 2. 深度席位校验与修正：过滤有效玩家，强制按 0..maxPlayers-1 顺序严格重置席位
+                const validPlayers = room.players.filter((p: any) => p && (p.id || p.name)).slice(0, room.maxPlayers);
+                if (validPlayers.length < room.maxPlayers) {
+                  return false;
                 }
 
-                room.status = 'starting';
-                // 满员无条件自动开局：强制全员就绪，席位编号严格对齐
-                room.players.forEach((pl: any, idx: number) => {
+                validPlayers.forEach((pl: any, idx: number) => {
                   pl.seat = idx;
                   pl.isReady = true;
                   delete pl.isDisconnected;
                   delete pl.isAutoManaged;
-                  if (!pl.name) {
-                    pl.name = `茶客 #${idx + 1}`;
-                  }
+                  if (!pl.id) pl.id = `P-usr-${idx}-${Date.now().toString(36)}`;
+                  if (!pl.name) pl.name = `茶客 #${idx + 1}`;
                 });
+                room.players = validPlayers;
 
-                // 强制产生全新发牌切片（零残留）
+                // 3. 强制锁定状态为 starting
+                room.status = 'starting';
+
+                // 4. 强制产生全新发牌切片（零残留）
                 delete room.deal;
                 const freshDeal = generateRoomDeal(room.gameType, room.sceneMode, room.maxPlayers);
                 room.deal = freshDeal;
 
                 const defaultBoard = createDefaultBoardState(room.id, room.gameType);
+
                 if (!rooms.has(room.id)) {
                   rooms.set(room.id, {
                     id: room.id,
@@ -814,9 +801,9 @@ function chessWebSocketPlugin(): Plugin {
                   }
                 }
 
-                console.log(`🚀 [满员自动发牌] 房间 ${room.id} (${room.gameType}-${room.sceneMode}) ${room.players.length}/${room.maxPlayers} 玩家全部就位满员，广播 scene_room_full 开启新局！`);
+                console.log(`🚀 [满员自动发牌] 房间 ${room.id} (${room.gameType}-${room.sceneMode}) ${room.players.length}/${room.maxPlayers} 玩家席位校验完毕，广播 scene_room_full 锁定 UI！`);
 
-                // 1. 广播满员进桌事件，通知所有客户端 UI 平滑切换至竞技场
+                // 5. 广播满员进桌事件 (status: starting)，通知所有客户端 UI 平滑切换至竞技场并锁定 UI
                 broadcast({
                   type: 'scene_room_full',
                   roomId: room.id,
@@ -827,11 +814,12 @@ function chessWebSocketPlugin(): Plugin {
                   deal: freshDeal,
                   turnSeat: freshDeal?.starterSeat ?? 0,
                   boardState: defaultBoard,
+                  status: 'starting',
                   forceReset: true,
                   timestamp: Date.now(),
                 });
 
-                // 2. 250ms 后广播 scene_room_started，确保 UI 同步加载/挂载完成后，锁定为 playing
+                // 6. 250ms 后顺畅广播 scene_room_started，正式将状态锁定为 playing
                 setTimeout(() => {
                   if (room && sceneWaitingRooms.has(room.id)) {
                     room.status = 'playing';
@@ -840,7 +828,6 @@ function chessWebSocketPlugin(): Plugin {
                       authRoom.status = 'playing';
                       authRoom.lastTurnTs = Date.now();
                     }
-
                     broadcast({
                       type: 'scene_room_started',
                       roomId: room.id,
@@ -857,7 +844,6 @@ function chessWebSocketPlugin(): Plugin {
                     });
                   }
                 }, 250);
-
                 return true;
               }
               return false;
@@ -884,14 +870,17 @@ function chessWebSocketPlugin(): Plugin {
                 p.originalId = rawId || 'P-me';
               }
 
-              // Enforce 100 points minimum admission for all games
-              if (typeof p.coins === 'number' && p.coins < 100) {
+              // 校验积分门槛，防止零积分或积分不足的玩家入座
+              const reqCoins = getSceneRequiredCoins(gType, sMode);
+              const currentCoins = typeof p.coins === 'number' && !isNaN(p.coins) ? p.coins : 0;
+              if (currentCoins < reqCoins || currentCoins <= 0) {
                 ws.send(
                   JSON.stringify({
                     type: 'scene_join_rejected',
                     reason: 'insufficient_coins',
-                    requiredCoins: 100,
-                    currentCoins: p.coins,
+                    requiredCoins: reqCoins,
+                    currentCoins,
+                    text: `您的积分不足 (${currentCoins}/${reqCoins} 分)，无法入座此分场！`,
                   })
                 );
                 return;
@@ -1026,7 +1015,6 @@ function chessWebSocketPlugin(): Plugin {
                   maxPlayers: room.maxPlayers,
                   status: room.status,
                 });
-                scheduleAutoFillRoom(room.id);
               }
               return;
             }
