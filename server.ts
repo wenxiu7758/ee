@@ -593,25 +593,15 @@ wss.on('connection', (ws) => {
             return true;
           }
 
-          // 满员自动开局：在等待匹配模式下，入座满员即刻全员就绪；在上一局结算模式下检查全员就绪或自动就绪
-          const isWaitingMode = room.status === 'waiting';
-          const allReady = isWaitingMode || room.players.every((pl) => (pl as any).isReady === true);
-          if (!allReady) {
-            const readyCount = room.players.filter((pl) => (pl as any).isReady).length;
-            console.log(`⏳ [等待全员就绪] 房间 ${room.id} (${room.gameType}-${room.sceneMode}) 已就绪 ${readyCount}/${room.maxPlayers} 玩家，等待其他牌友点击继续...`);
-            return false;
-          }
-
           room.status = 'starting';
-
-          // 强制对齐房间内所有真人玩家的席位编号与全员准备状态
+          // 满员无条件自动开局：强制全员就绪，席位编号严格对齐
           room.players.forEach((pl, idx) => {
             pl.seat = idx;
             (pl as any).isReady = true;
             delete (pl as any).isDisconnected;
             delete (pl as any).isAutoManaged;
             if (!pl.name) {
-              pl.name = '茶客';
+              pl.name = `茶客 #${idx + 1}`;
             }
           });
 
@@ -772,7 +762,7 @@ wss.on('connection', (ws) => {
         }
         if (!room) {
           for (const r of sceneWaitingRooms.values()) {
-            if (r.gameType === gType && r.sceneMode === sMode && r.status === 'waiting' && r.players.length < r.maxPlayers) {
+            if (r.gameType === gType && r.sceneMode === sMode && r.players.length < r.maxPlayers && (r.status === 'waiting' || r.status === 'finished')) {
               room = r;
               break;
             }
@@ -846,6 +836,8 @@ wss.on('connection', (ws) => {
             gameType: room.gameType,
             sceneMode: room.sceneMode,
             player: p,
+            assignedPlayerId: p.id,
+            assignedSeat: p.seat,
             players: room.players,
             maxPlayers: room.maxPlayers,
             status: room.status,

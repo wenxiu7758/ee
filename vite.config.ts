@@ -731,25 +731,15 @@ function chessWebSocketPlugin(): Plugin {
                   return true;
                 }
 
-                // 满员自动开局：在等待匹配模式下，入座满员即刻全员就绪；在上一局结算模式下检查全员就绪或自动就绪
-                const isWaitingMode = room.status === 'waiting';
-                const allReady = isWaitingMode || room.players.every((pl: any) => pl.isReady === true);
-                if (!allReady) {
-                  const readyCount = room.players.filter((pl: any) => pl.isReady).length;
-                  console.log(`⏳ [等待全员就绪] 房间 ${room.id} (${room.gameType}-${room.sceneMode}) 已就绪 ${readyCount}/${room.maxPlayers} 玩家，等待其他牌友点击继续...`);
-                  return false;
-                }
-
                 room.status = 'starting';
-
-                // 强制对齐房间内所有真人玩家的席位编号与全员准备状态
+                // 满员无条件自动开局：强制全员就绪，席位编号严格对齐
                 room.players.forEach((pl: any, idx: number) => {
                   pl.seat = idx;
                   pl.isReady = true;
                   delete pl.isDisconnected;
                   delete pl.isAutoManaged;
                   if (!pl.name) {
-                    pl.name = '茶客';
+                    pl.name = `茶客 #${idx + 1}`;
                   }
                 });
 
@@ -910,10 +900,10 @@ function chessWebSocketPlugin(): Plugin {
                 }
               }
 
-              // 若未在任何房间，查找仍有空位的等候房间 (必须是 status === 'waiting')
+              // 若未在任何房间，查找仍有空位的等候房间
               if (!room) {
                 for (const r of sceneWaitingRooms.values()) {
-                  if (r.gameType === gType && r.sceneMode === sMode && r.status === 'waiting' && r.players.length < r.maxPlayers) {
+                  if (r.gameType === gType && r.sceneMode === sMode && r.players.length < r.maxPlayers && (r.status === 'waiting' || r.status === 'finished')) {
                     room = r;
                     break;
                   }
@@ -978,6 +968,8 @@ function chessWebSocketPlugin(): Plugin {
                   gameType: room.gameType,
                   sceneMode: room.sceneMode,
                   player: p,
+                  assignedPlayerId: p.id,
+                  assignedSeat: p.seat,
                   players: room.players,
                   maxPlayers: room.maxPlayers,
                   status: room.status,

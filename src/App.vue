@@ -490,7 +490,7 @@
             :is-rotated-90="isRotated90"
             :scene-mode="activeYansanScene"
             :room-players="currentWaitingRoomPlayers"
-            :current-user="userProfile"
+            :current-user="currentUserForTable"
             :room-id="activeRoomId"
             :initial-deal="currentRoomDeal"
             :ws="ws"
@@ -506,7 +506,7 @@
             :is-rotated-90="isRotated90"
             :scene-mode="activeShisanshuiScene"
             :room-players="currentWaitingRoomPlayers"
-            :current-user="userProfile"
+            :current-user="currentUserForTable"
             :room-id="activeRoomId"
             :initial-deal="currentRoomDeal"
             :ws="ws"
@@ -523,7 +523,7 @@
             :is-rotated-90="isRotated90"
             :scene-mode="activeMahjongScene"
             :room-players="currentWaitingRoomPlayers"
-            :current-user="userProfile"
+            :current-user="currentUserForTable"
             :room-id="activeRoomId"
             :initial-deal="currentRoomDeal"
             :ws="ws"
@@ -1631,6 +1631,16 @@ const activeSceneMode = ref<string>('');
 const currentWaitingRoomPlayers = ref<ScenePlayer[]>([]);
 const isPracticeMode = ref(false);
 const currentRoomDeal = ref<any>(null);
+const myAssignedPlayerId = ref<string>('');
+const myAssignedSeat = ref<number | null>(null);
+
+const currentUserForTable = computed(() => {
+  return {
+    ...userProfile,
+    id: myAssignedPlayerId.value || userProfile.id,
+    seat: myAssignedSeat.value !== null ? myAssignedSeat.value : (userProfile as any).seat,
+  };
+});
 
 const sceneCounts = computed<Record<string, number>>(() => {
   const counts: Record<string, number> = {
