@@ -10,6 +10,7 @@ import { handleApiRoute } from './src/serverApi.ts';
 import { initTelegramBotService } from './src/telegramBotService.ts';
 import { presenceTracker } from './src/presenceTracker.ts';
 import { generateRoomDeal } from './src/gameDeckService.ts';
+import { createDefaultBoardState, getSceneRequiredCoins, type AuthoritativeBoardState } from './src/gameLogic/index.ts';
 
 // Auto-detect and load .env from project directory, parent directory (~/.env), or HOME
 const possibleEnvPaths = [
@@ -101,37 +102,7 @@ wss.on('error', (err) => {
   console.warn('[WS Server Warning]', err);
 });
 
-export interface AuthoritativeBoardState {
-  roomId: string;
-  gameType: string;
-  phase: 'idle' | 'bidding' | 'playing' | 'comparing' | 'ended';
-  turnSeat: number;
-  actionSeq: number;
-  moveCount: number;
-  multiplier: number;
-  handsCount: number[];
-  lastCombo?: any;
-  winnerSeat?: number | null;
-  discardsHistory?: any[];
-  updatedAt: number;
-}
-
-function createDefaultBoardState(roomId: string, gameType: string): AuthoritativeBoardState {
-  return {
-    roomId,
-    gameType,
-    phase: 'playing',
-    turnSeat: 0,
-    actionSeq: 1,
-    moveCount: 0,
-    multiplier: 1,
-    handsCount: [13, 13, 13, 13],
-    lastCombo: null,
-    winnerSeat: null,
-    discardsHistory: [],
-    updatedAt: Date.now(),
-  };
-}
+export type { AuthoritativeBoardState };
 
 const rooms = new Map<string, any>([
   [
@@ -579,25 +550,6 @@ wss.on('connection', (ws) => {
           }
         }
         return;
-      }
-
-      function getSceneRequiredCoins(gType: string, sMode: string): number {
-        if (gType === 'yansan') {
-          if (sMode === 'yansan-20-40') return 500;
-          if (sMode === 'yansan-10-20') return 200;
-          return 100;
-        }
-        if (gType === 'shisanshui') {
-          if (sMode === 'eight-realtime' || sMode === 'eight-booking') return 500;
-          if (sMode === 'shisanshui-10-20') return 200;
-          return 100;
-        }
-        if (gType === 'mahjong') {
-          if (sMode === 'mahjong-20-40') return 500;
-          if (sMode === 'mahjong-10-20') return 200;
-          return 100;
-        }
-        return 100;
       }
 
       function startRoomGameIfFull(room: SceneWaitingRoom) {

@@ -11,6 +11,7 @@ import { handleApiRoute } from './src/serverApi.ts';
 import { initTelegramBotService } from './src/telegramBotService.ts';
 import { presenceTracker } from './src/presenceTracker.ts';
 import { generateRoomDeal } from './src/gameDeckService.ts';
+import { createDefaultBoardState, getSceneRequiredCoins } from './src/gameLogic/index.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -183,23 +184,6 @@ function getOrInitServerCarriage(sceneMode: 'four-booking' | 'eight-booking', ca
   }
 
   return carriages[key];
-}
-
-function createDefaultBoardState(roomId: string, gameType: string) {
-  return {
-    roomId,
-    gameType,
-    phase: 'playing',
-    turnSeat: 0,
-    actionSeq: 1,
-    moveCount: 0,
-    multiplier: 1,
-    handsCount: [13, 13, 13, 13],
-    lastCombo: null,
-    winnerSeat: null,
-    discardsHistory: [],
-    updatedAt: Date.now(),
-  };
 }
 
 function chessWebSocketPlugin(): Plugin {
@@ -717,25 +701,6 @@ function chessWebSocketPlugin(): Plugin {
                 }
               }
               return;
-            }
-
-            function getSceneRequiredCoins(gType: string, sMode: string): number {
-              if (gType === 'yansan') {
-                if (sMode === 'yansan-20-40') return 500;
-                if (sMode === 'yansan-10-20') return 200;
-                return 100;
-              }
-              if (gType === 'shisanshui') {
-                if (sMode === 'eight-realtime' || sMode === 'eight-booking') return 500;
-                if (sMode === 'shisanshui-10-20') return 200;
-                return 100;
-              }
-              if (gType === 'mahjong') {
-                if (sMode === 'mahjong-20-40') return 500;
-                if (sMode === 'mahjong-10-20') return 200;
-                return 100;
-              }
-              return 100;
             }
 
             function startRoomGameIfFull(room: any) {
