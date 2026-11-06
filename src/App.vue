@@ -2824,8 +2824,8 @@ function connectWs() {
       } else if (msg.type === 'scene_room_update') {
         if (Array.isArray(msg.players)) {
           const isMeInRoom = (msg.roomId && activeRoomId.value && msg.roomId === activeRoomId.value) ||
-            (msg.gameType === activeGameType.value && msg.sceneMode === activeSceneMode.value && (currentView.value === 'scene_waiting' || currentView.value === 'chatroom' || currentView.value === 'arena')) ||
-            (msg.roomId && !activeRoomId.value && (currentView.value === 'scene_waiting' || currentView.value === 'chatroom')) ||
+            (msg.gameType === activeGameType.value && msg.sceneMode === activeSceneMode.value && (currentView.value === 'waiting-room' || currentView.value === 'chatroom' || currentView.value === 'arena')) ||
+            (msg.roomId && !activeRoomId.value && (currentView.value === 'waiting-room' || currentView.value === 'chatroom')) ||
             msg.players.some((p: any) =>
               (userProfile.id && (p.id === userProfile.id || p.originalId === userProfile.id || (typeof p.id === 'string' && p.id.startsWith(userProfile.id)))) ||
               (userProfile.name && p.name === userProfile.name)
@@ -2884,6 +2884,8 @@ function connectWs() {
         if (msg.roomId) activeRoomId.value = msg.roomId;
         if (msg.gameType) activeGameType.value = msg.gameType;
         if (msg.sceneMode) activeSceneMode.value = msg.sceneMode;
+        if (msg.assignedPlayerId) myAssignedPlayerId.value = msg.assignedPlayerId;
+        if (msg.assignedSeat !== undefined) myAssignedSeat.value = msg.assignedSeat;
         if (Array.isArray(msg.players)) currentWaitingRoomPlayers.value = msg.players;
         if (msg.deal) currentRoomDeal.value = msg.deal;
         const targetGame = msg.gameType || activeGameType.value;
@@ -2900,8 +2902,8 @@ function connectWs() {
       } else if (msg.type === 'scene_room_full' || msg.type === 'scene_room_started') {
         const playersArr = msg.players || [];
         const isMeInRoom = (msg.roomId && activeRoomId.value && msg.roomId === activeRoomId.value) ||
-          (msg.gameType === activeGameType.value && msg.sceneMode === activeSceneMode.value && (currentView.value === 'scene_waiting' || currentView.value === 'chatroom' || currentView.value === 'arena')) ||
-          (msg.roomId && !activeRoomId.value && (currentView.value === 'scene_waiting' || currentView.value === 'chatroom')) ||
+          (msg.gameType === activeGameType.value && msg.sceneMode === activeSceneMode.value && (currentView.value === 'waiting-room' || currentView.value === 'chatroom' || currentView.value === 'arena')) ||
+          (msg.roomId && !activeRoomId.value && (currentView.value === 'waiting-room' || currentView.value === 'chatroom')) ||
           (Array.isArray(playersArr) && playersArr.some((p: any) =>
             (userProfile.id && (p.id === userProfile.id || p.originalId === userProfile.id || (typeof p.id === 'string' && p.id.startsWith(userProfile.id)))) ||
             (userProfile.name && p.name === userProfile.name)

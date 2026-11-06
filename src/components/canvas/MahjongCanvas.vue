@@ -484,8 +484,26 @@ const props = defineProps<{
 }>();
 
 const mySeat = computed(() => {
-  if (props.isPracticeMode || !props.currentUser || !props.roomPlayers) return 0;
-  const idx = props.roomPlayers.findIndex((p: any) => p?.id === props.currentUser?.id);
+  if (props.isPracticeMode || !props.currentUser || !props.roomPlayers || props.roomPlayers.length === 0) return 0;
+  if (typeof props.currentUser?.seat === 'number' && props.currentUser.seat >= 0 && props.currentUser.seat < props.roomPlayers.length) {
+    return props.currentUser.seat;
+  }
+  const myId = props.currentUser?.id;
+  const myName = props.currentUser?.name;
+  const idx = props.roomPlayers.findIndex((p: any) => {
+    if (!p) return false;
+    if (myId) {
+      if (p.id === myId) return true;
+      if (p.originalId && p.originalId === myId) return true;
+      if (typeof p.id === 'string' && p.id.startsWith(myId)) return true;
+      if (typeof myId === 'string' && myId.startsWith(p.id)) return true;
+    }
+    if (myName) {
+      if (p.name === myName) return true;
+      if (typeof p.name === 'string' && p.name.startsWith(myName)) return true;
+    }
+    return false;
+  });
   return idx >= 0 ? idx : 0;
 });
 
