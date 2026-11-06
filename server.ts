@@ -582,10 +582,48 @@ wss.on('connection', (ws) => {
       }
 
       // ==========================================
-      // Pure Multiplayer Scene Waiting Room Events (纯真人对局，严禁人机补位)
-      // ==========================================
+      const roomAutoFillTimers = new Map<string, any>();
+
+      function scheduleAutoFillRoom(roomId: string) {
+        if (roomAutoFillTimers.has(roomId)) {
+          clearTimeout(roomAutoFillTimers.get(roomId));
+        }
+        const timer = setTimeout(() => {
+          roomAutoFillTimers.delete(roomId);
+          const room = sceneWaitingRooms.get(roomId);
+          if (!room || room.status === 'playing' || room.status === 'starting') return;
+
+          const botNames = ['九州逸客', '浮生半日', '云水禅心', '竹林听风', '江枫渔火', '松下问童', '沧海一声', '问鼎中原'];
+          const botAvatars = ['🧙‍♂️', '🥷', '🕵️‍♂️', '👲', '🧔‍♂️', '👨‍💼', '🧑‍🌾', '👑'];
+
+          while (room.players.length < room.maxPlayers) {
+            const seat = room.players.length;
+            const bName = botNames[(seat + Math.floor(Math.random() * 4)) % botNames.length];
+            const bAvatar = botAvatars[(seat + Math.floor(Math.random() * 4)) % botAvatars.length];
+            room.players.push({
+              id: `P-bot-${Date.now()}-${seat}-${Math.random().toString(36).slice(2, 6)}`,
+              name: bName,
+              avatar: bAvatar,
+              rating: 1850 + Math.floor(Math.random() * 200),
+              coins: 2000 + Math.floor(Math.random() * 5000),
+              seat,
+              isSimulated: true,
+              isReady: true,
+            } as any);
+          }
+
+          console.log(`🤖 [极速补齐满员] 房间 ${room.id} (${room.gameType}-${room.sceneMode}) 已自动补齐 ${room.players.length}/${room.maxPlayers} 席位，触发自动开局！`);
+          startRoomGameIfFull(room);
+        }, 1500);
+        roomAutoFillTimers.set(roomId, timer);
+      }
+
       function startRoomGameIfFull(room: SceneWaitingRoom) {
         if (!room) return false;
+        if (roomAutoFillTimers.has(room.id)) {
+          clearTimeout(roomAutoFillTimers.get(room.id));
+          roomAutoFillTimers.delete(room.id);
+        }
 
         if (room.players.length >= room.maxPlayers) {
           // If already in starting or playing with a deal, do not double-init
@@ -863,6 +901,7 @@ wss.on('connection', (ws) => {
             maxPlayers: room.maxPlayers,
             status: room.status,
           });
+          scheduleAutoFillRoom(room.id);
         }
 
         broadcast({

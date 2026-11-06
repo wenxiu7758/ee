@@ -1540,11 +1540,11 @@ function onRestartGame() {
   }
 }
 
-watch(() => props.initialDeal, (newDeal) => {
+watch([() => props.initialDeal, () => props.roomPlayers], ([newDeal, players]) => {
   if (newDeal?.seatCards) {
-    applyDeal(newDeal);
+    applyDeal(newDeal, Boolean(players && players.length > 0));
   }
-}, { immediate: true });
+}, { immediate: true, deep: true });
 
 // 逆时针寻找下一个手牌未走完的存活席位：本家(0) ➔ 东席(3) ➔ 北席(2) ➔ 西席(1) ➔ 本家(0)
 function getNextActiveSeat(fromSeat: number): number {

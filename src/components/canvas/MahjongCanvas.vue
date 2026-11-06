@@ -544,11 +544,11 @@ watch(() => props.sceneMode, () => {
   dealNewMatch();
 });
 
-watch(() => props.initialDeal, (deal) => {
+watch([() => props.initialDeal, () => props.roomPlayers], ([deal]) => {
   if (deal && deal.seatCards) {
     dealNewMatch(undefined, false);
   }
-}, { immediate: true });
+}, { immediate: true, deep: true });
 
 const containerRef = ref<HTMLDivElement | null>(null);
 const tableWidthPx = ref(680);

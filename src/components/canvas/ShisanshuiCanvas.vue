@@ -767,11 +767,11 @@ watch(() => props.sceneMode, () => {
   dealNewMatch();
 });
 
-watch(() => props.initialDeal, (deal) => {
+watch([() => props.initialDeal, () => props.roomPlayers], ([deal]) => {
   if (deal && deal.seatCards) {
     dealNewMatch(false);
   }
-}, { immediate: true });
+}, { immediate: true, deep: true });
 
 const isDealingCeremony = ref(false);
 
